@@ -14,8 +14,8 @@
         android:orientation="vertical"
         android:layout_weight="1">
         <ImageView
-            android:layout_width="72dp"
-            android:layout_height="72dp"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
             android:layout_gravity="center_horizontal"
 
             android:alpha="0.8"
@@ -29,7 +29,7 @@
             android:layout_marginTop="8dp"
             android:gravity="center"
             android:text="@string/onboarding_greeting"
-            android:textAppearance="?attr/textAppearanceHeadline5" />
+            android:textAppearance="?attr/textAppearanceHeadlineLarge" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -38,25 +38,17 @@
             android:layout_marginTop="8dp"
             android:gravity="center"
             android:text="@string/onboarding_caption"
-            android:textAppearance="?attr/textAppearanceCaption" />
+            android:textAppearance="?attr/textAppearanceBody2" />
     </LinearLayout>
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
+        android:gravity="center"
         android:layout_marginBottom="12dp"
         android:text="@string/onboarding_warning"
         android:textAppearance="?attr/textAppearanceLabelMedium" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="12dp"
-        android:text="@string/onboarding_press_next"
-        android:textAppearance="?attr/textAppearanceCaption" />
-
 
 
 </LinearLayout>
