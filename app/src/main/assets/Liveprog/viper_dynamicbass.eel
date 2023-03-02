@@ -1,6 +1,6 @@
 desc: Dynamic Bass (based on ViperFX)
 author: VipersAudio, thepbone
-//tags: bass filter
+tags: bass filter viper
 
 dBassGain:100<0,100,1>Bass strength (%)
 
