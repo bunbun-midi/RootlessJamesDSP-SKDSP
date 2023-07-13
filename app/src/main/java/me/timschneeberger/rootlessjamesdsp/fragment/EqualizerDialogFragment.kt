@@ -10,14 +10,14 @@ import android.view.View
 import androidx.core.content.edit
 import androidx.preference.PreferenceDialogFragmentCompat
 import com.google.android.material.chip.Chip
+import me.timschneeberger.rootlessjamesdsp.R
 import me.timschneeberger.rootlessjamesdsp.databinding.PreferenceEqualizerDialogBinding
+import me.timschneeberger.rootlessjamesdsp.interop.PreferenceCache
 import me.timschneeberger.rootlessjamesdsp.preference.EqualizerPreference
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import me.timschneeberger.rootlessjamesdsp.view.EqualizerSurface
-import me.timschneeberger.rootlessjamesdsp.view.EqualizerSurface.Companion.MAX_DB
-import me.timschneeberger.rootlessjamesdsp.view.EqualizerSurface.Companion.MIN_DB
 
 class EqualizerDialogFragment : PreferenceDialogFragmentCompat() {
 
@@ -60,19 +60,31 @@ class EqualizerDialogFragment : PreferenceDialogFragmentCompat() {
         equalizer = binding.equalizerSurface
         equalizer!!.areKnobsVisible = true
         equalizer!!.setOnTouchListener { v, event ->
+            val minDb = equalizer!!.minDb
+            val maxDb = equalizer!!.maxDb
             val band = equalizer!!.findClosest(event.x)
-            var level = event.y / v.height * (MIN_DB - MAX_DB) - MIN_DB
+            var level = event.y / v.height * (minDb - maxDb) - minDb
             if (level > -0.05 && level < 0.0) {
-                level = 0f
-            } else if (level > MAX_DB) {
-                level = MAX_DB.toFloat()
-            } else if (level < MIN_DB) {
-                level = MIN_DB.toFloat()
+                level = 0.0
+            } else if (level > maxDb) {
+                level = maxDb
+            } else if (level < minDb) {
+                level = minDb
             }
 
-            updateBand(band, level.toDouble())
+            updateBand(band, level)
             applyCurrentSetting()
             true
+        }
+
+        val type = PreferenceCache.uncachedGet(requireContext(), Constants.PREF_EQ, R.string.key_eq_filter_type, "0").toIntOrNull() ?: 0
+        equalizer!!.mode = if(type == 0) EqualizerSurface.Mode.Fir else EqualizerSurface.Mode.Iir
+        equalizer!!.iirOrder = when(type) {
+            1 -> 4
+            2 -> 6
+            3 -> 8
+            4 -> 10
+            else -> 12
         }
 
         mLevels.forEachIndexed(equalizer!!::setBand)
@@ -105,7 +117,7 @@ class EqualizerDialogFragment : PreferenceDialogFragmentCompat() {
 
     override fun onDialogClosed(positiveResult: Boolean) {
         if (positiveResult) {
-            val array = EqualizerSurface.FreqScale + mLevels
+            val array = EqualizerSurface.SCALE + mLevels
             val value = array.joinToString(";")
             if (preference.callChangeListener(value)) {
                 applySetting(value)
@@ -116,7 +128,7 @@ class EqualizerDialogFragment : PreferenceDialogFragmentCompat() {
     }
 
     private fun applyCurrentSetting() {
-        applySetting((EqualizerSurface.FreqScale + mLevels).joinToString(";"))
+        applySetting((EqualizerSurface.SCALE + mLevels).joinToString(";"))
     }
 
     private fun applySetting(value: String) {
@@ -142,10 +154,9 @@ class EqualizerDialogFragment : PreferenceDialogFragmentCompat() {
 
         fun newInstance(key: String): EqualizerDialogFragment {
             val fragment = EqualizerDialogFragment()
-
-            val args = Bundle()
-            args.putString(BUNDLE_KEY, key)
-            fragment.arguments = args
+            fragment.arguments = Bundle().apply {
+                putString(BUNDLE_KEY, key)
+            }
             return fragment
         }
     }
