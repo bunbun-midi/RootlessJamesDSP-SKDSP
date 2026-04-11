@@ -357,9 +357,9 @@ All the limitations mentioned above are **not relevant** for the magisk/root ver
       <sub><b>1307 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/SerAX3L"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15755831/medium/4f31c78564ed55fef4b2bf8d96213a55.jpeg" />
+      <a href="https://crowdin.com/profile/AXEN.dev"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15755831/medium/4f31c78564ed55fef4b2bf8d96213a55.jpeg" />
         <br />
-        <sub><b>Alessandro Belfiore (SerAX3L)</b></sub></a>
+        <sub><b>Alessandro Belfiore (AXEN.dev)</b></sub></a>
       <br />
       <sub><b>1228 words</b></sub>
     </td>
