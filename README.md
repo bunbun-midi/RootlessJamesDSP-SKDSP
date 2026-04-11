@@ -78,6 +78,12 @@ Tested on:
 * Google Pixel 6 Pro (Android 13)
 * Google Pixel 6a
 
+
+Changes regarding Android 15 and up
+* Due to google adding a privacy focused feature regarding screen sharing. 
+* Notifications (and probably other things) get hidden by the system.
+* To fix this enabling "Disable screen share protetion" in developer options is necessary
+
 ## Spotify support patch
 > **Note** This patch is universal and may also work with other apps than Spotify.
 
