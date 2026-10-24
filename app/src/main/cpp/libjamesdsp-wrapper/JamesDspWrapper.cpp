@@ -4,7 +4,11 @@
 #include <Log.h>
 
 #include <string>
+#include <mutex>
 #include <jni.h>
+#if defined(__aarch64__)
+#include <cstdint>
+#endif
 
 #include "JamesDspWrapper.h"
 #include "JArrayList.h"
@@ -44,8 +48,43 @@ inline JamesDspWrapper* castWrapper(jlong raw){
 
 #define DECLARE_DSP(retval) \
     DECLARE_WRAPPER(retval) \
+    std::lock_guard<std::recursive_mutex> dspLockGuard(wrapper->lock); \
     auto* dsp = cast(wrapper->dsp); \
     RETURN_IF_NULL(dsp, retval)
+
+static JavaVM* javaVm = nullptr;
+
+/* JNIEnv pointers are thread-local. Callbacks (e.g. Liveprog stdout) can be triggered from the
+ * audio thread, so we must not use the JNIEnv stored during alloc(). */
+static JNIEnv* getEnv()
+{
+    JNIEnv* env = nullptr;
+    if(javaVm == nullptr || javaVm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
+        return nullptr;
+    return env;
+}
+
+/* Denormal (subnormal) floats appear in IIR filter feedback paths when the signal decays
+ * towards silence and can make processing much slower on some CPUs, causing dropouts.
+ * Flush them to zero on the audio thread. This is inaudible. */
+static inline void enableFlushToZero()
+{
+    static thread_local bool applied = false;
+    if(applied)
+        return;
+#if defined(__aarch64__)
+    uint64_t fpcr;
+    __asm__ __volatile__("mrs %0, fpcr" : "=r"(fpcr));
+    fpcr |= (1ULL << 24); /* FZ */
+    __asm__ __volatile__("msr fpcr, %0" : : "r"(fpcr));
+#elif defined(__x86_64__) || defined(__i386__)
+    unsigned int csr;
+    __asm__ __volatile__("stmxcsr %0" : "=m"(csr));
+    csr |= 0x8040; /* FTZ | DAZ */
+    __asm__ __volatile__("ldmxcsr %0" : : "m"(csr));
+#endif
+    applied = true;
+}
 
 #define DECLARE_WRAPPER_V DECLARE_WRAPPER()
 #define DECLARE_DSP_V DECLARE_DSP()
@@ -147,15 +186,22 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_alloc(JNIEnv *e
 extern "C" JNIEXPORT void JNICALL
 Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_free(JNIEnv *env, jobject obj, jlong self)
 {
-    DECLARE_DSP_V
+    DECLARE_WRAPPER_V
 
-    LOGD("JamesDspWrapper::dtor: freeing memory allocated at %lx", (long)self);
+    {
+        // Wait for any in-flight processing/parameter call to finish before freeing
+        std::lock_guard<std::recursive_mutex> dspLockGuard(wrapper->lock);
+        auto* dsp = cast(wrapper->dsp);
+        RETURN_IF_NULL(dsp,)
 
-    setStdOutHandler(nullptr, nullptr);
+        LOGD("JamesDspWrapper::dtor: freeing memory allocated at %lx", (long)self);
 
-    JamesDSPFree(dsp);
-    free(dsp);
-    wrapper->dsp = nullptr;
+        setStdOutHandler(nullptr, nullptr);
+
+        JamesDSPFree(dsp);
+        free(dsp);
+        wrapper->dsp = nullptr;
+    }
 
     JamesDSPGlobalMemoryDeallocation();
 
@@ -233,6 +279,7 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_processInt16(JN
     if(offset < 0)
         offset = 0;
 
+    enableFlushToZero();
     auto input = env->GetShortArrayElements(inputObj, nullptr);
     auto output = env->GetShortArrayElements(outputObj, nullptr);
     dsp->processInt16Multiplexd(dsp, input + offset, output, inputLength / 2);
@@ -254,6 +301,7 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_processInt32(JN
     if(offset < 0)
         offset = 0;
 
+    enableFlushToZero();
     auto input = env->GetIntArrayElements(inputObj, nullptr);
     auto output = env->GetIntArrayElements(outputObj, nullptr);
     dsp->processInt32Multiplexd(dsp, input + offset, output, inputLength / 2);
@@ -313,6 +361,7 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_processFloat(JN
     if(offset < 0)
         offset = 0;
 
+    enableFlushToZero();
     auto input = env->GetFloatArrayElements(inputObj, nullptr);
     auto output = env->GetFloatArrayElements(outputObj, nullptr);
 
@@ -744,11 +793,21 @@ void receiveLiveprogStdOut(const char *buffer, void* userData)
         return;
     }
 
-    self->env->CallVoidMethod(self->callbackInterface, self->callbackOnLiveprogOutput, self->env->NewStringUTF(buffer));
+    JNIEnv* env = getEnv();
+    if(env == nullptr)
+    {
+        LOGE("JamesDspWrapper::receiveLiveprogStdOut: Thread not attached to JVM. Unhandled output: %s", buffer);
+        return;
+    }
+
+    jstring str = env->NewStringUTF(buffer);
+    env->CallVoidMethod(self->callbackInterface, self->callbackOnLiveprogOutput, str);
+    env->DeleteLocalRef(str);
 }
 
-extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *, void *)
+extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *)
 {
+    javaVm = vm;
 #ifndef NO_CRASHLYTICS
     firebase::crashlytics::Initialize();
 #endif

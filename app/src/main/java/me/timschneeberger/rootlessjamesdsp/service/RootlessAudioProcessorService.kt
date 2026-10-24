@@ -76,6 +76,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private var mediaProjectionStartIntent: Intent? = null
 
     // Processing
+    @Volatile
     private var recreateRecorderRequested = false
     private var recorderThread: Thread? = null
     private lateinit var engine: JamesDspLocalEngine
@@ -89,14 +90,18 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private var notificationSessions: Array<IEffectSession> = emptyArray()
 
     // Idle detection
+    @Volatile
     private var isProcessorIdle = false
+    @Volatile
     private var suspendOnIdle = false
 
     // Exclude restricted apps flag
     private var excludeRestrictedSessions = false
 
     // Termination flags
+    @Volatile
     private var isProcessorDisposing = false
+    @Volatile
     private var isServiceDisposing = false
 
     // Shared preferences
@@ -441,12 +446,36 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 "Buffer size: $bufferSize; Buffer size (bytes): $bufferSizeBytes ; " +
                 "HAL buffer size (bytes): ${determineBufferSize()}")
 
+        // Buffer layout
+        //  - The DSP always processes blocks of exactly `bufferSize` samples (interleaved stereo).
+        //    libjamesdsp rebuilds filters/convolutions whenever the block size changes, so we
+        //    never pass partial blocks to it.
+        //  - The capture and playback buffers hold several blocks. With only one block of
+        //    headroom (old behaviour), the AudioTrack ran dry while the next block was being
+        //    captured & processed, causing periodic underruns (clicks/pops).
+        //  - After (re)starting playback we pre-fill the track with a little silence so that
+        //    processing time and scheduling jitter never empty the playback queue.
+        val frameSizeBytes = 2 /* channels */ * (bufferSizeBytes / bufferSize)
+        val blockFrames = bufferSize / 2
+        val primeFrames = maxOf(blockFrames / 2, sampleRate / 50 /* 20 ms */)
+        val recordBufferBytes = maxOf(
+            bufferSizeBytes * RECORD_BUFFER_BLOCKS,
+            AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_STEREO, encodingFormat)
+        )
+        val trackBufferBytes = maxOf(
+            (primeFrames + blockFrames * TRACK_BUFFER_BLOCKS) * frameSizeBytes,
+            AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, encodingFormat)
+        )
+
+        Timber.i("Block: $blockFrames frames; record buffer: $recordBufferBytes bytes; " +
+                "track buffer: $trackBufferBytes bytes; pre-fill: $primeFrames frames")
+
         // Create recorder and track
         var recorder: AudioRecord
-        val track: AudioTrack
+        var track: AudioTrack
         try {
-            recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
-            track = buildAudioTrack(encodingFormat, sampleRate, bufferSizeBytes)
+            recorder = buildAudioRecord(encodingFormat, sampleRate, recordBufferBytes)
+            track = buildAudioTrack(encodingFormat, sampleRate, trackBufferBytes)
         }
         catch(ex: Exception) {
             Timber.e("Failed to create initial audio record/track")
@@ -462,6 +491,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         // TODO Move all audio-related code to C++
         recorderThread = Thread {
+            // Audio threads must not be preempted by regular app/background work
+            try {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+            }
+            catch (ex: Exception) {
+                Timber.w("Failed to raise audio thread priority")
+                Timber.w(ex)
+            }
+
             try {
                 // Rebuilding the processing pipeline must not overwrite the current
                 // session-aware notification with a false "idle" state.
@@ -474,6 +512,20 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 val floatOutBuffer = FloatArray(bufferSize)
                 val shortBuffer = ShortArray(bufferSize)
                 val shortOutBuffer = ShortArray(bufferSize)
+                val floatSilence = FloatArray(primeFrames * 2)
+                val shortSilence = ShortArray(primeFrames * 2)
+                var lastUnderrunCount = 0
+
+                fun startPlayback() {
+                    track.play()
+                    // Pre-fill to absorb processing time & scheduling jitter
+                    if(encoding == AudioEncoding.PcmShort)
+                        track.write(shortSilence, 0, shortSilence.size, AudioTrack.WRITE_BLOCKING)
+                    else
+                        track.write(floatSilence, 0, floatSilence.size, AudioTrack.WRITE_BLOCKING)
+                    lastUnderrunCount = track.underrunCount
+                }
+
                 while (!isProcessorDisposing) {
                     if(recreateRecorderRequested) {
                         recreateRecorderRequested = false
@@ -492,7 +544,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         }
 
                         // Recreate recorder with new AudioPlaybackRecordingConfiguration
-                        recorder = buildAudioRecord(encodingFormat, sampleRate, bufferSizeBytes)
+                        recorder = buildAudioRecord(encodingFormat, sampleRate, recordBufferBytes)
                         Timber.d("Recorder recreated")
                     }
 
@@ -521,19 +573,51 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     }
                     // Resume track if suspended
                     if(track.playState != AudioTrack.PLAYSTATE_PLAYING) {
-                        track.play()
+                        startPlayback()
                     }
 
-                    // Choose encoding and process data
-                    if(encoding == AudioEncoding.PcmShort) {
-                        recorder.read(shortBuffer, 0, shortBuffer.size, AudioRecord.READ_BLOCKING)
+                    // Capture exactly one full block, then process it
+                    val readResult = if(encoding == AudioEncoding.PcmShort)
+                        readFully(recorder, shortBuffer)
+                    else
+                        readFully(recorder, floatBuffer)
+
+                    if(readResult < 0) {
+                        // Don't process & replay stale data; rebuild the recorder instead
+                        Timber.e("AudioRecord.read failed ($readResult); recreating recorder")
+                        recreateRecorderRequested = true
+                        continue
+                    }
+                    if(readResult < bufferSize) {
+                        // Recording was stopped while reading (e.g. recorder recreation)
+                        continue
+                    }
+
+                    val writeResult = if(encoding == AudioEncoding.PcmShort) {
                         engine.processInt16(shortBuffer, shortOutBuffer)
                         track.write(shortOutBuffer, 0, shortOutBuffer.size, AudioTrack.WRITE_BLOCKING)
                     }
                     else {
-                        recorder.read(floatBuffer, 0, floatBuffer.size, AudioRecord.READ_BLOCKING)
                         engine.processFloat(floatBuffer, floatOutBuffer)
                         track.write(floatOutBuffer, 0, floatOutBuffer.size, AudioTrack.WRITE_BLOCKING)
+                    }
+
+                    if(writeResult == AudioTrack.ERROR_DEAD_OBJECT) {
+                        // The output was invalidated (e.g. routing change); create a new track
+                        Timber.w("AudioTrack is dead; recreating track")
+                        track.release()
+                        track = buildAudioTrack(encodingFormat, sampleRate, trackBufferBytes)
+                        continue
+                    }
+                    else if(writeResult < 0) {
+                        Timber.e("AudioTrack.write failed ($writeResult)")
+                    }
+
+                    // Diagnostics: report playback underruns (audible as clicks/dropouts)
+                    val underruns = track.underrunCount
+                    if(underruns > lastUnderrunCount) {
+                        Timber.w("Playback underrun detected (total: $underruns)")
+                        lastUnderrunCount = underruns
                     }
                 }
             } catch (e: IOException) {
@@ -557,6 +641,37 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             }
         }
         recorderThread!!.start()
+    }
+
+    /**
+     * Reads until [buffer] is completely filled.
+     * @return number of samples read, which is less than the buffer size if recording stopped,
+     *         or a negative error code.
+     */
+    private fun readFully(recorder: AudioRecord, buffer: FloatArray): Int {
+        var offset = 0
+        while (offset < buffer.size) {
+            val result = recorder.read(buffer, offset, buffer.size - offset, AudioRecord.READ_BLOCKING)
+            if (result < 0)
+                return result
+            if (result == 0 && recorder.recordingState != AudioRecord.RECORDSTATE_RECORDING)
+                break
+            offset += result
+        }
+        return offset
+    }
+
+    private fun readFully(recorder: AudioRecord, buffer: ShortArray): Int {
+        var offset = 0
+        while (offset < buffer.size) {
+            val result = recorder.read(buffer, offset, buffer.size - offset, AudioRecord.READ_BLOCKING)
+            if (result < 0)
+                return result
+            if (result == 0 && recorder.recordingState != AudioRecord.RECORDSTATE_RECORDING)
+                break
+            offset += result
+        }
+        return offset
     }
 
     // Terminate recording thread
@@ -679,6 +794,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     companion object {
         const val SESSION_LOSS_MAX_RETRIES = 1
+
+        // Capacity of the capture/playback buffers in DSP blocks (excluding the pre-fill)
+        private const val RECORD_BUFFER_BLOCKS = 3
+        private const val TRACK_BUFFER_BLOCKS = 2
 
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".rootless.service.START"
         const val ACTION_STOP = BuildConfig.APPLICATION_ID + ".rootless.service.STOP"
