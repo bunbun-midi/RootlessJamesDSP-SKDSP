@@ -3,6 +3,7 @@
 
 #include <jni.h>
 #include <mutex>
+#include "ChainProcessor.h"
 
 typedef struct
 {
@@ -11,6 +12,8 @@ typedef struct
      * background thread while the audio thread processes; most effects are not protected
      * by libjamesdsp's internal lock. Recursive because callbacks into Java may re-enter. */
     std::recursive_mutex lock;
+    /* User-defined effect order and wrapper-side effects (compressor, convolver wet/dry) */
+    chain::State chain;
     JNIEnv* env; /* Only valid on the thread that called alloc(); use getEnv() for callbacks */
     jobject callbackInterface;
     jmethodID callbackOnLiveprogOutput;

@@ -41,6 +41,13 @@ object JamesDspWrapper {
     external fun setVacuumTube(self: JamesDspHandle, enable: Boolean, level: Float): Boolean
     external fun setLiveprog(self: JamesDspHandle, enable: Boolean, id: String, liveprogContent: String): Boolean
 
+    // Wrapper-side effect chain (see ChainProcessor.cpp)
+    external fun setEffectOrder(self: JamesDspHandle, order: IntArray): Boolean
+    external fun setCompressor(self: JamesDspHandle, enable: Boolean, threshold: Float, ratio: Float, attack: Float, release: Float, knee: Float, makeup: Float): Boolean
+    external fun setConvolverMix(self: JamesDspHandle, wet: Float): Boolean
+    external fun setPitchShift(self: JamesDspHandle, enable: Boolean, semitones: Float): Boolean
+    external fun setPitchShiftHq(self: JamesDspHandle, enable: Boolean, semitones: Float): Boolean
+
     // EEL VM utilities
     external fun enumerateEelVariables(self: JamesDspHandle): ArrayList<EelVmVariable>
     external fun manipulateEelVariable(self: JamesDspHandle, name: String, value: Float): Boolean

@@ -4,6 +4,7 @@
 #include <Log.h>
 
 #include <string>
+#include <cstring>
 #include <mutex>
 #include <jni.h>
 #if defined(__aarch64__)
@@ -255,6 +256,7 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setSamplingRate
 {
     DECLARE_DSP_V
     JamesDSPSetSampleRate(dsp, sample_rate, force_refresh);
+    wrapper->chain.pitchShifterHq.configure(dsp->fs);
 }
 
 
@@ -282,7 +284,9 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_processInt16(JN
     enableFlushToZero();
     auto input = env->GetShortArrayElements(inputObj, nullptr);
     auto output = env->GetShortArrayElements(outputObj, nullptr);
+    chain::beginProcess(&wrapper->chain, dsp);
     dsp->processInt16Multiplexd(dsp, input + offset, output, inputLength / 2);
+    chain::endProcess();
     env->ReleaseShortArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseShortArrayElements(outputObj, output, 0);
 }
@@ -304,7 +308,9 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_processInt32(JN
     enableFlushToZero();
     auto input = env->GetIntArrayElements(inputObj, nullptr);
     auto output = env->GetIntArrayElements(outputObj, nullptr);
+    chain::beginProcess(&wrapper->chain, dsp);
     dsp->processInt32Multiplexd(dsp, input + offset, output, inputLength / 2);
+    chain::endProcess();
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
 }
@@ -323,7 +329,9 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_processInt24Pac
 
     auto input = env->GetBooleanArrayElements(inputObj, nullptr);
     auto output = env->GetBooleanArrayElements(outputObj, nullptr);
+    chain::beginProcess(&wrapper->chain, dsp);
     dsp->processInt24PackedMultiplexd(dsp, input, output, inputLength / 2);
+    chain::endProcess();
     env->ReleaseBooleanArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseBooleanArrayElements(outputObj, output, 0);
     return outputObj;
@@ -341,7 +349,9 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_processInt8U24(
 
     auto input = env->GetIntArrayElements(inputObj, nullptr);
     auto output = env->GetIntArrayElements(outputObj, nullptr);
+    chain::beginProcess(&wrapper->chain, dsp);
     dsp->processInt8_24Multiplexd(dsp, input, output, inputLength / 2);
+    chain::endProcess();
     env->ReleaseIntArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseIntArrayElements(outputObj, output, 0);
     return outputObj;
@@ -365,10 +375,59 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_processFloat(JN
     auto input = env->GetFloatArrayElements(inputObj, nullptr);
     auto output = env->GetFloatArrayElements(outputObj, nullptr);
 
+    chain::beginProcess(&wrapper->chain, dsp);
     dsp->processFloatMultiplexd(dsp, input + offset, output, inputLength / 2);
+    chain::endProcess();
 
     env->ReleaseFloatArrayElements(inputObj, input, JNI_ABORT);
     env->ReleaseFloatArrayElements(outputObj, output, 0);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setEffectOrder(JNIEnv *env, jobject obj, jlong self, jintArray order)
+{
+    DECLARE_DSP_B
+    jsize count = env->GetArrayLength(order);
+    auto* ids = env->GetIntArrayElements(order, nullptr);
+    wrapper->chain.setOrder(ids, count);
+    env->ReleaseIntArrayElements(order, ids, JNI_ABORT);
+    return true;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setCompressor(JNIEnv *env, jobject obj, jlong self, jboolean enable,
+                                                                               jfloat threshold, jfloat ratio, jfloat attack,
+                                                                               jfloat release, jfloat knee, jfloat makeup)
+{
+    DECLARE_DSP_B
+    wrapper->chain.compressor.setParams(enable, threshold, ratio, attack, release, knee, makeup);
+    return true;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setPitchShift(JNIEnv *env, jobject obj, jlong self, jboolean enable, jfloat semitones)
+{
+    DECLARE_DSP_B
+    wrapper->chain.pitchShifter.setParams(enable, semitones);
+    return true;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setPitchShiftHq(JNIEnv *env, jobject obj, jlong self, jboolean enable, jfloat semitones)
+{
+    DECLARE_DSP_B
+    // Allocates the Bungee stretcher here (settings thread), not on the audio thread
+    wrapper->chain.pitchShifterHq.configure(dsp->fs);
+    wrapper->chain.pitchShifterHq.setParams(enable, semitones);
+    return true;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setConvolverMix(JNIEnv *env, jobject obj, jlong self, jfloat wet)
+{
+    DECLARE_DSP_B
+    wrapper->chain.convolverMix.target = wet < 0.0f ? 0.0f : (wet > 1.0f ? 1.0f : wet);
+    return true;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL

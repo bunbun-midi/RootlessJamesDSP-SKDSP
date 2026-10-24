@@ -716,4 +716,44 @@ Tap on \'Tutorial\' below for detailed instructions.</string>
     <string name="android_15_screenshare_keyguard_warning">Android 15 introduces a restriction that stops screen sharing when the device is locked. To workaround this issue, the \'PROJECT_MEDIA\' permission must be granted using Shizuku or ADB.
 
 Please press \'Continue\' below to re-do the setup wizard.</string>
+
+    <!-- Effect order -->
+    <string name="effect_order_title">Effect order</string>
+    <string name="effect_order_summary_none">No effects active. Tap to change the order in which effects are applied.</string>
+    <string name="effect_order_reset">Reset</string>
+    <string name="effect_order_state_on">Active</string>
+    <string name="effect_order_state_off">Off</string>
+    <string name="effect_order_drag_alt">Drag to reorder</string>
+    <string name="effect_order_move_up">Move up</string>
+    <string name="effect_order_move_down">Move down</string>
+    <string name="effect_order_geq_peq">Graphic &amp; parametric EQ</string>
+
+    <!-- Compressor -->
+    <string name="compressor_enable">Compressor</string>
+    <string name="compressor_threshold">Threshold</string>
+    <string name="compressor_ratio">Ratio</string>
+    <string name="compressor_attack">Attack</string>
+    <string name="compressor_release">Release</string>
+    <string name="compressor_knee">Knee width</string>
+    <string name="compressor_makeup">Makeup gain</string>
+
+    <!-- Convolver -->
+    <string name="convolver_mix">Wet/dry mix</string>
+
+    <!-- Pitch shifter -->
+    <string name="pitch_enable">Pitch shifter</string>
+    <string name="pitch_semitones">Pitch</string>
+    <string name="pitch_semitones_unit">\u0020st</string>
+    <string name="pitch_hq_enable">Pitch Shifter HQ</string>
+    <string name="pitch_hq_summary">Higher quality (Bungee), adds about 0.2 s of latency</string>
+
+    <!-- Speed shift -->
+    <string name="speed_shift_title">Speed shift</string>
+    <string name="speed_shift_bubble_summary">Shows a floating button while audio processing is on. Tap the button to slow playing audio down (pitch is kept), swipe up or down on it to change the speed, long-press and drag to move it</string>
+    <string name="speed_shift_speed">Speed</string>
+    <string name="speed_shift_speed_unit">\u00d7</string>
+    <string name="speed_shift_permission_required">Allow \"Display over other apps\" to show the floating speed button</string>
+    <string name="speed_shift_bubble_off_desc">Speed shift off. Tap to slow down to %1$s</string>
+    <string name="speed_shift_bubble_on_desc">Speed shift on at %1$s. Tap to turn off, swipe up or down to change speed</string>
+    <string name="speed_shift_behind">%1$s behind</string>
 </resources>

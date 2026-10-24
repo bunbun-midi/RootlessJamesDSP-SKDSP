@@ -70,12 +70,72 @@
         </com.google.android.material.card.MaterialCardView>
 
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_speed_shift_wrapper"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="1dp">
+
+            <androidx.fragment.app.FragmentContainerView
+                android:id="@+id/card_speed_shift"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_effect_order_wrapper"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="1dp">
+
+            <androidx.fragment.app.FragmentContainerView
+                android:id="@+id/card_effect_order"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_pitch_wrapper"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="1dp">
+
+            <androidx.fragment.app.FragmentContainerView
+                android:id="@+id/card_pitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_pitch_hq_wrapper"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="1dp">
+
+            <androidx.fragment.app.FragmentContainerView
+                android:id="@+id/card_pitch_hq"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="1dp">
 
             <androidx.fragment.app.FragmentContainerView
                 android:id="@+id/card_compressor"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_dyn_compressor_wrapper"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="1dp">
+
+            <androidx.fragment.app.FragmentContainerView
+                android:id="@+id/card_dyn_compressor"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
         </com.google.android.material.card.MaterialCardView>

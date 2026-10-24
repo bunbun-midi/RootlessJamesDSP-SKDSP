@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup
+        android:key="@string/key_pitch_enable"
+        android:disableDependentsState="false"
+        android:title="@string/pitch_enable"
+        android:icon="@drawable/ic_baseline_music_note_24dp"
+        app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
+            android:key="@string/key_pitch_semitones"
+            android:title="@string/pitch_semitones"
+            android:defaultValue="0"
+            app:minValue="-24"
+            app:maxValue="24"
+            app:seekBarIncrement="1"
+            app:precision="0"
+            app:unit="@string/pitch_semitones_unit"
+            app:allowDividerAbove="false"
+            app:updatesContinuously="true"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"/>
+    </me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup>
+</PreferenceScreen>

@@ -277,6 +277,14 @@ class JamesDspRemoteEngine(
     override fun supportsEelVmAccess(): Boolean { return false }
     override fun supportsCustomCrossfeed(): Boolean { return false }
 
+    // Effect order, compressor, convolver wet/dry and pitch shifter are implemented in the rootless JNI wrapper
+    // and are not available in the JamesDSP audio effect plugin used by root builds.
+    override fun setEffectOrder(order: IntArray): Boolean { return true }
+    override fun setCompressor(enable: Boolean, threshold: Float, ratio: Float, attack: Float, release: Float, knee: Float, makeup: Float): Boolean { return true }
+    override fun setConvolverMix(wet: Float): Boolean { return true }
+    override fun setPitchShift(enable: Boolean, semitones: Float): Boolean { return true }
+    override fun setPitchShiftHq(enable: Boolean, semitones: Float): Boolean { return true }
+
     // EEL VM utilities (unavailable)
     override fun enumerateEelVariables(): ArrayList<EelVmVariable> { return arrayListOf() }
     override fun manipulateEelVariable(name: String, value: Float): Boolean { return false }

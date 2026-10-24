@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup
+        android:key="@string/key_speed_shift_bubble"
+        android:disableDependentsState="false"
+        android:title="@string/speed_shift_title"
+        android:summary="@string/speed_shift_bubble_summary"
+        android:icon="@drawable/ic_slow_motion_24dp"
+        app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
+            android:key="@string/key_speed_shift_speed"
+            android:title="@string/speed_shift_speed"
+            android:defaultValue="0.75"
+            app:minValue="0.25"
+            app:maxValue="1"
+            app:precision="2"
+            app:unit="@string/speed_shift_speed_unit"
+            app:allowDividerAbove="false"
+            app:updatesContinuously="true"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"/>
+    </me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup>
+</PreferenceScreen>

@@ -15,6 +15,18 @@
             app:useSimpleSummaryProvider="false"
             app:type="Convolver"
             app:iconSpaceReserved="false"/>
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
+            android:key="@string/key_convolver_mix"
+            android:title="@string/convolver_mix"
+            android:defaultValue="100"
+            app:minValue="0"
+            app:maxValue="100"
+            app:precision="0"
+            app:unit="% wet"
+            app:allowDividerAbove="false"
+            app:updatesContinuously="true"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"/>
         <Preference
             android:key="@string/key_convolver_sample_rate_files"
             android:title="@string/convolver_sample_rate_files"

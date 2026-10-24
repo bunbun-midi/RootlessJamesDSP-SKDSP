@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.timschneeberger.rootlessjamesdsp.R
+import me.timschneeberger.rootlessjamesdsp.model.EffectChain
 import me.timschneeberger.rootlessjamesdsp.interop.structure.EelVmVariable
 import me.timschneeberger.rootlessjamesdsp.model.ParametricEqBandList
 import me.timschneeberger.rootlessjamesdsp.model.ProcessorMessage
@@ -48,7 +49,12 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
 
     fun clearCache() {
         cache.clear()
+        lastConvolverConfig = null
     }
+
+    // Last convolver configuration passed to setConvolver(). Reloading an impulse response is
+    // expensive, so we skip it when only unrelated settings (e.g. the wet/dry mix) changed.
+    private var lastConvolverConfig: List<Any>? = null
 
     private fun reportSampleRate(value: Float) {
         context.sendLocalBroadcast(Intent(Constants.ACTION_REPORT_SAMPLE_RATE).apply {
@@ -121,6 +127,27 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
             val convolverSampleRateFiles = cache.get(R.string.key_convolver_sample_rate_files, "")
             val convolverAdvImp = cache.get(R.string.key_convolver_adv_imp, Constants.DEFAULT_CONVOLVER_ADVIMP)
             val convolverMode = cache.get(R.string.key_convolver_mode, "0").toInt()
+            val convolverMix = cache.get(R.string.key_convolver_mix, 100f)
+
+            cache.select(Constants.PREF_COMPRESSOR)
+            val compressorEnabled = cache.get(R.string.key_compressor_enable, false)
+            val compressorThreshold = cache.get(R.string.key_compressor_threshold, -18f)
+            val compressorRatio = cache.get(R.string.key_compressor_ratio, 4f)
+            val compressorAttack = cache.get(R.string.key_compressor_attack, 10f)
+            val compressorRelease = cache.get(R.string.key_compressor_release, 150f)
+            val compressorKnee = cache.get(R.string.key_compressor_knee, 6f)
+            val compressorMakeup = cache.get(R.string.key_compressor_makeup, 0f)
+
+            cache.select(Constants.PREF_PITCH)
+            val pitchEnabled = cache.get(R.string.key_pitch_enable, false)
+            val pitchSemitones = cache.get(R.string.key_pitch_semitones, 0f)
+
+            cache.select(Constants.PREF_PITCH_HQ)
+            val pitchHqEnabled = cache.get(R.string.key_pitch_hq_enable, false)
+            val pitchHqSemitones = cache.get(R.string.key_pitch_hq_semitones, 0f)
+
+            cache.select(Constants.PREF_EFFECT_ORDER)
+            val effectOrder = cache.get(R.string.key_effect_order, EffectChain.DEFAULT_ORDER_STRING)
 
             val targets = cache.changedNamespaces.toTypedArray() + (forceUpdateNamespaces ?: arrayOf())
             targets.forEach {
@@ -148,8 +175,24 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
                         val selectedFile = mappedFile.takeIf {
                             File(FileLibraryPreference.createFullPathCompat(context, it)).isFile
                         } ?: convolverFile
-                        setConvolver(convolverEnabled, selectedFile, convolverMode, convolverAdvImp)
+                        val mixResult = setConvolverMix(convolverMix / 100f)
+                        val config = listOf(convolverEnabled, selectedFile, convolverMode, convolverAdvImp, sampleRate)
+                        val forced = forceUpdateNamespaces?.contains(Constants.PREF_CONVOLVER) == true
+                        if (forced || config != lastConvolverConfig) {
+                            lastConvolverConfig = config
+                            setConvolver(convolverEnabled, selectedFile, convolverMode, convolverAdvImp) && mixResult
+                        }
+                        else mixResult
                     }
+                    Constants.PREF_COMPRESSOR -> setCompressor(
+                        compressorEnabled, compressorThreshold, compressorRatio,
+                        compressorAttack, compressorRelease, compressorKnee, compressorMakeup
+                    )
+                    Constants.PREF_PITCH -> setPitchShift(pitchEnabled, pitchSemitones)
+                    Constants.PREF_PITCH_HQ -> setPitchShiftHq(pitchHqEnabled, pitchHqSemitones)
+                    Constants.PREF_EFFECT_ORDER -> setEffectOrder(
+                        EffectChain.parse(effectOrder).map { e -> e.id }.toIntArray()
+                    )
                     else -> true
                 }
 
@@ -407,6 +450,11 @@ abstract class JamesDspBaseEngine(val context: Context, val callbacks: JamesDspW
     abstract fun setBassBoost(enable: Boolean, maxGain: Float): Boolean
     abstract fun setStereoEnhancement(enable: Boolean, level: Float): Boolean
     abstract fun setVacuumTube(enable: Boolean, level: Float): Boolean
+    abstract fun setEffectOrder(order: IntArray): Boolean
+    abstract fun setCompressor(enable: Boolean, threshold: Float, ratio: Float, attack: Float, release: Float, knee: Float, makeup: Float): Boolean
+    abstract fun setConvolverMix(wet: Float): Boolean
+    abstract fun setPitchShift(enable: Boolean, semitones: Float): Boolean
+    abstract fun setPitchShiftHq(enable: Boolean, semitones: Float): Boolean
 
     protected abstract fun setMultiEqualizerInternal(enable: Boolean, filterType: Int, interpolationMode: Int, bands: DoubleArray): Boolean
     protected abstract fun setCompanderInternal(enable: Boolean, timeConstant: Float, granularity: Int, tfTransforms: Int, bands: DoubleArray): Boolean

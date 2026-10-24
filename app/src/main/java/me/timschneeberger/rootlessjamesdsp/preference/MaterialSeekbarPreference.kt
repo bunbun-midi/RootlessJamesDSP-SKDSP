@@ -433,7 +433,8 @@ class MaterialSeekbarPreference : Preference {
 
             if(valueLabelOverride == null)
             {
-                mSeekBarValueTextView!!.text = "%.${mPrecision}f${mUnit}".format(Locale.ROOT, value)
+                // Append the unit after formatting; it must not become part of the format string ("%" in units)
+                mSeekBarValueTextView!!.text = "%.${mPrecision}f".format(Locale.ROOT, value) + mUnit
             }
             else
             {

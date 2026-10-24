@@ -122,6 +122,28 @@
     <string name="key_convolver_processing_rate" translatable="false">convolver_processing_rate</string>
     <string name="key_convolver_mode" translatable="false">convolver_mode</string>
     <string name="key_convolver_adv_imp" translatable="false">convolver_adv_imp</string>
+    <string name="key_convolver_mix" translatable="false">convolver_mix</string>
+
+    <string name="key_compressor_enable" translatable="false">compressor_enable</string>
+    <string name="key_compressor_threshold" translatable="false">compressor_threshold</string>
+    <string name="key_compressor_ratio" translatable="false">compressor_ratio</string>
+    <string name="key_compressor_attack" translatable="false">compressor_attack</string>
+    <string name="key_compressor_release" translatable="false">compressor_release</string>
+    <string name="key_compressor_knee" translatable="false">compressor_knee</string>
+    <string name="key_compressor_makeup" translatable="false">compressor_makeup</string>
+
+    <string name="key_pitch_enable" translatable="false">pitch_enable</string>
+    <string name="key_pitch_semitones" translatable="false">pitch_semitones</string>
+    <string name="key_pitch_hq_enable" translatable="false">pitch_hq_enable</string>
+    <string name="key_pitch_hq_semitones" translatable="false">pitch_hq_semitones</string>
+
+    <string name="key_speed_shift_bubble" translatable="false">speed_shift_bubble</string>
+    <string name="key_speed_shift_speed" translatable="false">speed_shift_speed</string>
+    <string name="key_speed_shift_bubble_x" translatable="false">speed_shift_bubble_x</string>
+    <string name="key_speed_shift_bubble_y" translatable="false">speed_shift_bubble_y</string>
+    <string name="key_speed_shift_bubble_right" translatable="false">speed_shift_bubble_right</string>
+
+    <string name="key_effect_order" translatable="false">effect_order</string>
 
     <string name="key_tube_enable" translatable="false">tube_enable</string>
     <string name="key_tube_drive" translatable="false">tube_drive</string>

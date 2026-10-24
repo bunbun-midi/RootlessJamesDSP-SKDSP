@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import me.timschneeberger.rootlessjamesdsp.R
 import me.timschneeberger.rootlessjamesdsp.databinding.FragmentDspBinding
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
+import me.timschneeberger.rootlessjamesdsp.utils.isRootless
 import me.timschneeberger.rootlessjamesdsp.utils.preferences.Preferences
 import org.koin.android.ext.android.inject
 import timber.log.Timber
@@ -77,8 +78,28 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     R.xml.dsp_output_control_preferences
                 ))
             .replace(
+                R.id.card_effect_order, PreferenceGroupFragment.newInstance(Constants.PREF_EFFECT_ORDER,
+                    R.xml.dsp_effect_order_preferences
+                ))
+            .replace(
+                R.id.card_pitch, PreferenceGroupFragment.newInstance(Constants.PREF_PITCH,
+                    R.xml.dsp_pitch_preferences
+                ))
+            .replace(
+                R.id.card_pitch_hq, PreferenceGroupFragment.newInstance(Constants.PREF_PITCH_HQ,
+                    R.xml.dsp_pitch_hq_preferences
+                ))
+            .replace(
+                R.id.card_speed_shift, PreferenceGroupFragment.newInstance(Constants.PREF_SPEED_SHIFT,
+                    R.xml.speed_shift_preferences
+                ))
+            .replace(
                 R.id.card_compressor, PreferenceGroupFragment.newInstance(Constants.PREF_COMPANDER,
                     R.xml.dsp_compander_preferences
+                ))
+            .replace(
+                R.id.card_dyn_compressor, PreferenceGroupFragment.newInstance(Constants.PREF_COMPRESSOR,
+                    R.xml.dsp_compressor_preferences
                 ))
             .replace(
                 R.id.card_bass, PreferenceGroupFragment.newInstance(Constants.PREF_BASS,
@@ -125,6 +146,13 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     R.xml.dsp_reverb_preferences
                 ))
             .commit()
+
+        // Effect order, compressor, pitch shifter and convolver wet/dry are implemented in the rootless engine only
+        binding.cardEffectOrderWrapper.isVisible = isRootless()
+        binding.cardDynCompressorWrapper.isVisible = isRootless()
+        binding.cardPitchWrapper.isVisible = isRootless()
+        binding.cardPitchHqWrapper.isVisible = isRootless()
+        binding.cardSpeedShiftWrapper.isVisible = isRootless()
 
         // Load initial preferences
         arrayOf(R.string.key_device_profiles_enable).forEach {

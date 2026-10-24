@@ -121,6 +121,31 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         return JamesDspWrapper.setVacuumTube(handle, enable, level)
     }
 
+    override fun setEffectOrder(order: IntArray): Boolean
+    {
+        return JamesDspWrapper.setEffectOrder(handle, order)
+    }
+
+    override fun setCompressor(enable: Boolean, threshold: Float, ratio: Float, attack: Float, release: Float, knee: Float, makeup: Float): Boolean
+    {
+        return JamesDspWrapper.setCompressor(handle, enable, threshold, ratio, attack, release, knee, makeup)
+    }
+
+    override fun setConvolverMix(wet: Float): Boolean
+    {
+        return JamesDspWrapper.setConvolverMix(handle, wet)
+    }
+
+    override fun setPitchShift(enable: Boolean, semitones: Float): Boolean
+    {
+        return JamesDspWrapper.setPitchShift(handle, enable, semitones)
+    }
+
+    override fun setPitchShiftHq(enable: Boolean, semitones: Float): Boolean
+    {
+        return JamesDspWrapper.setPitchShiftHq(handle, enable, semitones)
+    }
+
     override fun setMultiEqualizerInternal(
         enable: Boolean,
         filterType: Int,

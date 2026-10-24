@@ -6,6 +6,8 @@ object Constants {
     // App-relevant preference namespaces
     const val PREF_APP = "application"
     const val PREF_VAR = "variable"
+    // Speed shift bubble (not part of presets on purpose: no "dsp_" prefix)
+    const val PREF_SPEED_SHIFT = "speedshift"
 
     // DSP-relevant preference namespaces
     const val PREF_BASS = "dsp_bass"
@@ -21,6 +23,10 @@ object Constants {
     const val PREF_REVERB = "dsp_reverb"
     const val PREF_STEREOWIDE = "dsp_stereowide"
     const val PREF_TUBE = "dsp_tube"
+    const val PREF_COMPRESSOR = "dsp_compressor"
+    const val PREF_PITCH = "dsp_pitch"
+    const val PREF_PITCH_HQ = "dsp_pitch_hq"
+    const val PREF_EFFECT_ORDER = "dsp_effect_order"
 
     // Default string values
     const val DEFAULT_CONVOLVER_ADVIMP = "-80;-100;0;0;0;0"
@@ -45,6 +51,7 @@ object Constants {
     const val ACTION_DISCARD_AUTHORIZATION = BuildConfig.APPLICATION_ID + ".action.service.DISCARD_AUTHORIZATION"
     const val ACTION_REPORT_SAMPLE_RATE = BuildConfig.APPLICATION_ID + ".action.service.REPORT_SAMPLE_RATE"
     const val ACTION_BACKUP_RESTORED = BuildConfig.APPLICATION_ID + ".action.backup.RESTORED"
+    const val ACTION_SPEED_SHIFT_REFRESH = BuildConfig.APPLICATION_ID + ".action.speedshift.REFRESH"
 
     // Intent extras
     const val EXTRA_SAMPLE_RATE = BuildConfig.APPLICATION_ID + ".extra.service.SAMPLE_RATE"

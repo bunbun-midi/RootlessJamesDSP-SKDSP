@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.provider.Settings
 import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
 import androidx.core.math.MathUtils.clamp
@@ -33,6 +34,7 @@ import me.timschneeberger.rootlessjamesdsp.R
 import me.timschneeberger.rootlessjamesdsp.flavor.CrashlyticsImpl
 import me.timschneeberger.rootlessjamesdsp.interop.JamesDspLocalEngine
 import me.timschneeberger.rootlessjamesdsp.interop.ProcessorMessageHandler
+import me.timschneeberger.rootlessjamesdsp.interop.SpeedShifter
 import me.timschneeberger.rootlessjamesdsp.model.IEffectSession
 import me.timschneeberger.rootlessjamesdsp.model.preference.AudioEncoding
 import me.timschneeberger.rootlessjamesdsp.model.room.AppBlocklistDatabase
@@ -43,6 +45,8 @@ import me.timschneeberger.rootlessjamesdsp.session.rootless.OnRootlessSessionCha
 import me.timschneeberger.rootlessjamesdsp.session.rootless.RootlessSessionDatabase
 import me.timschneeberger.rootlessjamesdsp.session.rootless.RootlessSessionManager
 import me.timschneeberger.rootlessjamesdsp.session.rootless.SessionRecordingPolicyManager
+import me.timschneeberger.rootlessjamesdsp.speedshift.SpeedShiftBubble
+import me.timschneeberger.rootlessjamesdsp.speedshift.SpeedShiftController
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
 import me.timschneeberger.rootlessjamesdsp.utils.Constants.ACTION_PREFERENCES_UPDATED
 import me.timschneeberger.rootlessjamesdsp.utils.Constants.ACTION_SAMPLE_RATE_UPDATED
@@ -62,6 +66,9 @@ import me.timschneeberger.rootlessjamesdsp.utils.sdkAbove
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.IOException
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 
 @RequiresApi(Build.VERSION_CODES.Q)
@@ -104,6 +111,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile
     private var isServiceDisposing = false
 
+    // Speed shift (floating button)
+    private var speedShiftBubble: SpeedShiftBubble? = null
+
     // Shared preferences
     private val preferences: Preferences.App by inject()
     private val preferencesVar: Preferences.Var by inject()
@@ -145,6 +155,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         filter.addAction(ACTION_SERVICE_RELOAD_LIVEPROG)
         filter.addAction(ACTION_SERVICE_HARD_REBOOT_CORE)
         filter.addAction(ACTION_SERVICE_SOFT_REBOOT_CORE)
+        filter.addAction(Constants.ACTION_SPEED_SHIFT_REFRESH)
         registerLocalReceiver(broadcastReceiver, filter)
 
         // Setup shared preferences
@@ -154,6 +165,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         // Setup database observer
         blockedApps.observeForever(blockedAppObserver)
+
+        // Speed shift: always start in real time; show the floating button if enabled
+        SpeedShiftController.setActive(false)
+        SpeedShiftController.loadFromPreferences(this)
+        SpeedShiftController.prefs(this).registerOnSharedPreferenceChangeListener(speedShiftPreferencesListener)
+        updateSpeedShiftBubble()
 
         notificationManager.cancel(Notifications.ID_SERVICE_STARTUP)
 
@@ -252,6 +269,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         preferences.unregisterOnSharedPreferenceChangeListener(preferencesListener)
         notificationManager.cancel(Notifications.ID_SERVICE_STATUS)
 
+        SpeedShiftController.prefs(this).unregisterOnSharedPreferenceChangeListener(speedShiftPreferencesListener)
+        speedShiftBubble?.hide()
+        speedShiftBubble = null
+        SpeedShiftController.setActive(false)
+
         stopSelf()
         super.onDestroy()
     }
@@ -260,6 +282,40 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private val preferencesListener = SharedPreferences.OnSharedPreferenceChangeListener {
             _, key ->
         loadFromPreferences(key)
+    }
+
+    // Speed shift preferences listener (kept as a field: SharedPreferences only holds weak references)
+    private val speedShiftPreferencesListener = SharedPreferences.OnSharedPreferenceChangeListener {
+            _, key ->
+        when (key) {
+            getString(R.string.key_speed_shift_bubble) -> updateSpeedShiftBubble()
+            getString(R.string.key_speed_shift_speed) -> SpeedShiftController.loadFromPreferences(this)
+        }
+    }
+
+    // Show or hide the floating speed shift button
+    private fun updateSpeedShiftBubble() {
+        if (isServiceDisposing)
+            return
+
+        val enabled = SpeedShiftController.prefs(this)
+            .getBoolean(getString(R.string.key_speed_shift_bubble), false)
+        if (enabled && Settings.canDrawOverlays(this)) {
+            if (speedShiftBubble == null) {
+                speedShiftBubble = try {
+                    SpeedShiftBubble(this).also { it.show() }
+                } catch (ex: Exception) {
+                    Timber.e("Failed to create speed shift bubble")
+                    Timber.e(ex)
+                    null
+                }
+            }
+        } else {
+            speedShiftBubble?.hide()
+            speedShiftBubble = null
+            // Without the button there is no way to turn it off again
+            SpeedShiftController.setActive(false)
+        }
     }
 
     // Projection termination callback
@@ -295,6 +351,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SERVICE_RELOAD_LIVEPROG -> engine.syncWithPreferences(arrayOf(Constants.PREF_LIVEPROG))
                 ACTION_SERVICE_HARD_REBOOT_CORE -> restartRecording()
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
+                Constants.ACTION_SPEED_SHIFT_REFRESH -> updateSpeedShiftBubble()
             }
         }
     }
@@ -500,6 +557,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 Timber.w(ex)
             }
 
+            // Speed shift: the shifter is created when slow-down is switched on and destroyed
+            // when it is switched off (this also frees the backlog of captured audio)
+            var speedShifter = 0L
+
             try {
                 // Rebuilding the processing pipeline must not overwrite the current
                 // session-aware notification with a false "idle" state.
@@ -515,6 +576,82 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 val floatSilence = FloatArray(primeFrames * 2)
                 val shortSilence = ShortArray(primeFrames * 2)
                 var lastUnderrunCount = 0
+
+                var speedShiftWasActive = false
+                val shiftInBuffer = FloatArray(bufferSize)
+                val shiftOutBuffer = FloatArray(bufferSize)
+                // While idle, keep playing until the slowed-down backlog has been played (System.nanoTime)
+                var idleSuspendAt = 0L
+
+                fun releaseSpeedShifter() {
+                    if (speedShifter != 0L) {
+                        SpeedShifter.nativeDestroy(speedShifter)
+                        speedShifter = 0L
+                    }
+                    speedShiftWasActive = false
+                    SpeedShiftController.backlogSeconds = 0f
+                }
+
+                /**
+                 * Replaces the captured block with the speed-shifted signal while slow-down is on.
+                 * Switching on/off is crossfaded over one block (equal power).
+                 */
+                fun applySpeedShift() {
+                    val active = SpeedShiftController.isActive
+                    if (!active && !speedShiftWasActive)
+                        return
+
+                    if (active && speedShifter == 0L) {
+                        speedShifter = SpeedShifter.nativeCreate(sampleRate)
+                        if (speedShifter == 0L) {
+                            Timber.e("Failed to create speed shifter")
+                            SpeedShiftController.setActive(false)
+                            return
+                        }
+                    }
+                    if (speedShifter == 0L)
+                        return
+
+                    // Captured (dry) block as float
+                    val dry = if (encoding == AudioEncoding.PcmShort) {
+                        for (i in 0 until bufferSize)
+                            shiftInBuffer[i] = shortBuffer[i] * (1f / 32768f)
+                        shiftInBuffer
+                    } else floatBuffer
+
+                    SpeedShifter.nativeSetSpeed(speedShifter, SpeedShiftController.speed)
+                    SpeedShifter.nativeProcess(speedShifter, dry, shiftOutBuffer, blockFrames)
+
+                    if (active != speedShiftWasActive) {
+                        for (frame in 0 until blockFrames) {
+                            val angle = (frame + 0.5f) / blockFrames * (PI.toFloat() / 2f)
+                            val rising = sin(angle)
+                            val falling = cos(angle)
+                            val wet = if (active) rising else falling
+                            val dryGain = if (active) falling else rising
+                            for (ch in 0..1) {
+                                val i = frame * 2 + ch
+                                shiftOutBuffer[i] = shiftOutBuffer[i] * wet + dry[i] * dryGain
+                            }
+                        }
+                    }
+
+                    if (encoding == AudioEncoding.PcmShort) {
+                        for (i in 0 until bufferSize)
+                            shortBuffer[i] = (shiftOutBuffer[i] * 32768f).toInt().coerceIn(-32768, 32767).toShort()
+                    } else {
+                        System.arraycopy(shiftOutBuffer, 0, floatBuffer, 0, bufferSize)
+                    }
+
+                    if (active) {
+                        SpeedShiftController.backlogSeconds =
+                            SpeedShifter.nativeBacklogFrames(speedShifter).toFloat() / sampleRate
+                        speedShiftWasActive = true
+                    } else {
+                        // Crossfade back to real time done; drop the backlog
+                        releaseSpeedShifter()
+                    }
+                }
 
                 fun startPlayback() {
                     track.play()
@@ -549,8 +686,26 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     }
 
                     // Suspend core while idle
-                    if(isProcessorIdle && suspendOnIdle)
+                    // (with slow-down on: only after the slowed-down audio still pending has been played)
+                    val suspendNow = if(isProcessorIdle && suspendOnIdle) {
+                        val now = System.nanoTime()
+                        if(idleSuspendAt == 0L) {
+                            val drainSeconds = if(speedShifter != 0L)
+                                SpeedShiftController.backlogSeconds / SpeedShiftController.speed + 0.5f
+                            else 0f
+                            idleSuspendAt = now + (drainSeconds * 1e9f).toLong() + 1
+                        }
+                        now >= idleSuspendAt
+                    } else {
+                        idleSuspendAt = 0L
+                        false
+                    }
+
+                    if(suspendNow)
                     {
+                        // Pending slowed-down audio is stale once playback stopped
+                        releaseSpeedShifter()
+
                         if(recorder.state == AudioRecord.STATE_INITIALIZED &&
                             recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING)
                             recorder.stop()
@@ -593,6 +748,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         continue
                     }
 
+                    // Slow down the captured audio before the effect chain, if enabled
+                    applySpeedShift()
+
                     val writeResult = if(encoding == AudioEncoding.PcmShort) {
                         engine.processInt16(shortBuffer, shortOutBuffer)
                         track.write(shortOutBuffer, 0, shortOutBuffer.size, AudioTrack.WRITE_BLOCKING)
@@ -628,6 +786,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 Timber.e(e)
                 stopSelf()
             } finally {
+                if (speedShifter != 0L) {
+                    SpeedShifter.nativeDestroy(speedShifter)
+                    SpeedShiftController.backlogSeconds = 0f
+                }
+
                 // Clean up recorder and track
                 if(recorder.state != AudioRecord.STATE_UNINITIALIZED) {
                     recorder.stop()

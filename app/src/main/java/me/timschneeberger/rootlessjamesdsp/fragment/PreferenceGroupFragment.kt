@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.annotation.XmlRes
@@ -28,11 +30,14 @@ import me.timschneeberger.rootlessjamesdsp.preference.EqualizerPreference
 import me.timschneeberger.rootlessjamesdsp.preference.FileLibraryPreference
 import me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
 import me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup
+import me.timschneeberger.rootlessjamesdsp.speedshift.SpeedShiftController
 import me.timschneeberger.rootlessjamesdsp.utils.AudioSampleRateDetector
 import me.timschneeberger.rootlessjamesdsp.utils.ConvolverSampleRateFiles
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
+import me.timschneeberger.rootlessjamesdsp.utils.isRootless
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.registerLocalReceiver
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.sendLocalBroadcast
+import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.toast
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.unregisterLocalReceiver
 import me.timschneeberger.rootlessjamesdsp.utils.preferences.Preferences
 import org.koin.core.component.KoinComponent
@@ -48,6 +53,7 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
     private var recyclerView: RecyclerView? = null
     private var reportedProcessingSampleRate: Int? = null
     private var convolverStatusUpdater: (() -> Unit)? = null
+    private var speedShiftListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     private val listener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
@@ -100,7 +106,11 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         })
 
         when(args.getInt(BUNDLE_XML_RES)) {
-            R.xml.dsp_convolver_preferences -> setupConvolverSampleRateFiles()
+            R.xml.dsp_convolver_preferences -> {
+                setupConvolverSampleRateFiles()
+                // Wet/dry mix is implemented in the rootless engine only
+                findPreference<Preference>(getString(R.string.key_convolver_mix))?.isVisible = isRootless()
+            }
             R.xml.dsp_compander_preferences -> {
                 findPreference<MaterialSeekbarPreference>(getString(R.string.key_compander_granularity))?.valueLabelOverride =
                     fun(it: Float): String {
@@ -198,6 +208,7 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                     true
                 }
             }
+            R.xml.speed_shift_preferences -> setupSpeedShift()
             R.xml.dsp_graphiceq_preferences -> {
                 findPreference<Preference>(getString(R.string.key_geq_nodes))?.setOnPreferenceClickListener {
                     val intent = Intent(requireContext(), GraphicEqualizerActivity::class.java)
@@ -218,6 +229,49 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
 
         preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(listener)
         prefsApp.registerOnSharedPreferenceChangeListener(listenerApp)
+    }
+
+    private fun setupSpeedShift() {
+        val speedPreference = findPreference<MaterialSeekbarPreference>(getString(R.string.key_speed_shift_speed))
+        // seekBarIncrement is an integer attribute (AndroidX), so the 0.05 step is set here
+        speedPreference?.setSeekBarIncrement(SpeedShiftController.SPEED_STEP)
+        val bubbleKey = getString(R.string.key_speed_shift_bubble)
+        val speedKey = getString(R.string.key_speed_shift_speed)
+
+        speedShiftListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            when (key) {
+                bubbleKey -> {
+                    // The floating button needs the "display over other apps" permission
+                    if (prefs.getBoolean(bubbleKey, false) && !Settings.canDrawOverlays(requireContext())) {
+                        requireContext().toast(R.string.speed_shift_permission_required)
+                        try {
+                            startActivity(
+                                Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${requireContext().packageName}")
+                                )
+                            )
+                        } catch (ex: Exception) {
+                            Timber.e(ex)
+                        }
+                    }
+                }
+                // Keep the slider in sync with swipes on the floating button
+                speedKey -> speedPreference?.let { pref ->
+                    val value = prefs.getFloat(speedKey, SpeedShiftController.DEFAULT_SPEED)
+                    if (pref.getValue() != value)
+                        pref.setValue(value)
+                }
+            }
+        }
+        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(speedShiftListener)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Returning from the overlay permission screen: let the service show the button now
+        if (requireArguments().getInt(BUNDLE_XML_RES) == R.xml.speed_shift_preferences)
+            requireContext().sendLocalBroadcast(Intent(Constants.ACTION_SPEED_SHIFT_REFRESH))
     }
 
     private fun setupConvolverSampleRateFiles() {
@@ -365,6 +419,9 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         requireContext().unregisterLocalReceiver(receiver)
         prefsApp.unregisterOnSharedPreferenceChangeListener(listener)
         preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(listener)
+        speedShiftListener?.let {
+            preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(it)
+        }
     }
 
     @Suppress("DEPRECATION")
