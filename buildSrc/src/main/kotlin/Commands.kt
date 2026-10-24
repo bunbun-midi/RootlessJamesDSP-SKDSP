@@ -1,5 +1,4 @@
 import org.gradle.api.Project
-import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.TimeZone
 import java.util.Date
@@ -23,10 +22,8 @@ fun Project.getBuildTime(): String {
 }
 
 fun Project.runCommand(command: String): String {
-    val byteOut = ByteArrayOutputStream()
-    project.exec {
-        commandLine = command.split(" ")
-        standardOutput = byteOut
-    }
-    return String(byteOut.toByteArray()).trim()
+    // Project.exec is deprecated since Gradle 8.11; use the provider-based API instead
+    return providers.exec {
+        commandLine(command.split(" "))
+    }.standardOutput.asText.get().trim()
 }

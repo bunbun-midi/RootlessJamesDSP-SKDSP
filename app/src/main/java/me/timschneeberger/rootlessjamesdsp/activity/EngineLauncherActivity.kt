@@ -10,6 +10,7 @@ import androidx.core.content.getSystemService
 import me.timschneeberger.rootlessjamesdsp.service.RootAudioProcessorService
 import me.timschneeberger.rootlessjamesdsp.service.RootlessAudioProcessorService
 import me.timschneeberger.rootlessjamesdsp.utils.SdkCheck
+import me.timschneeberger.rootlessjamesdsp.utils.extensions.CompatExtensions.createAudioCaptureIntent
 import me.timschneeberger.rootlessjamesdsp.utils.isRoot
 import me.timschneeberger.rootlessjamesdsp.utils.sdkAbove
 import timber.log.Timber
@@ -22,6 +23,8 @@ class EngineLauncherActivity : BaseActivity() {
     private lateinit var capturePermissionLauncher: ActivityResultLauncher<Intent>
 
     override val disableAppTheme: Boolean = true
+    // Invisible helper activity without a layout
+    override val handlesWindowInsets: Boolean = true
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -57,7 +60,7 @@ class EngineLauncherActivity : BaseActivity() {
             }
 
             getSystemService<MediaProjectionManager>()
-                ?.createScreenCaptureIntent()
+                ?.createAudioCaptureIntent()
                 ?.let(capturePermissionLauncher::launch)
         }
     }

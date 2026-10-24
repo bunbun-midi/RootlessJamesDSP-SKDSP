@@ -57,6 +57,7 @@ import me.timschneeberger.rootlessjamesdsp.utils.Constants
 import me.timschneeberger.rootlessjamesdsp.utils.Result
 import me.timschneeberger.rootlessjamesdsp.utils.SdkCheck
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.AssetManagerExtensions.installPrivateAssets
+import me.timschneeberger.rootlessjamesdsp.utils.extensions.CompatExtensions.createAudioCaptureIntent
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.broadcastPresetLoadEvent
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.check
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.getAppName
@@ -616,13 +617,14 @@ class MainActivity : BaseActivity() {
 
     @RequiresApi(Build.VERSION_CODES.Q)
     fun requestCapturePermission() {
-        if(app.mediaProjectionStartIntent != null && isRootless() && !SdkCheck.isVanillaIceCream) {
+        // Note: Android >=14 doesn't allow token reuse
+        if(app.mediaProjectionStartIntent != null && isRootless() && !SdkCheck.isUpsideDownCake) {
             binding.powerToggle.isToggled = true
             RootlessAudioProcessorService.start(this, app.mediaProjectionStartIntent)
             return
         }
         try {
-            capturePermissionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
+            capturePermissionLauncher.launch(mediaProjectionManager.createAudioCaptureIntent())
         }
         catch (ex: ActivityNotFoundException) {
             toast(getString(R.string.error_projection_api_missing))

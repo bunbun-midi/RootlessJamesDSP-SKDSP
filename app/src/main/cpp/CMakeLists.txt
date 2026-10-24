@@ -8,6 +8,9 @@ cmake_minimum_required(VERSION 3.22.1)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections -Ofast -ftree-vectorize -DDEBUG")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections -Ofast -ftree-vectorize -DDEBUG")
 
+# Android 15+: support devices with 16 KB memory pages (independent of NDK version)
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+
 # Declares and names the project.
 project(jamesdsp LANGUAGES C)
 project(jamesdsp-wrapper LANGUAGES CXX)

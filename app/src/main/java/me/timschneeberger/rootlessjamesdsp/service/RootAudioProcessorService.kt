@@ -35,6 +35,7 @@ import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.se
 import me.timschneeberger.rootlessjamesdsp.utils.notifications.Notifications
 import me.timschneeberger.rootlessjamesdsp.utils.notifications.ServiceNotificationHelper
 import me.timschneeberger.rootlessjamesdsp.utils.preferences.Preferences
+import me.timschneeberger.rootlessjamesdsp.utils.SdkCheck
 import me.timschneeberger.rootlessjamesdsp.utils.sdkAbove
 import org.koin.android.ext.android.inject
 import org.koin.core.component.KoinComponent
@@ -114,7 +115,11 @@ class RootAudioProcessorService : BaseAudioProcessorService(), KoinComponent,
             startForeground(
                 Notifications.ID_SERVICE_STATUS,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                // Android 15+ forbids starting mediaPlayback services from BOOT_COMPLETED receivers
+                if (SdkCheck.isUpsideDownCake)
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                else
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
             )
         }.below {
             startForeground(

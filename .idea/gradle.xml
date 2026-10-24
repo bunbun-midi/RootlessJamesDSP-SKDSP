@@ -16,8 +16,9 @@
           </compositeBuild>
         </compositeConfiguration>
         <option name="testRunner" value="CHOOSE_PER_TEST" />
+        <option name="distributionType" value="LOCAL" />
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
-        <option name="gradleJvm" value="17" />
+        <option name="gradleJvm" value="#GRADLE_LOCAL_JAVA_HOME" />
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
@@ -29,7 +30,7 @@
             <option value="$PROJECT_DIR$/hidden-api-stubs" />
           </set>
         </option>
-        <option name="resolveExternalAnnotations" value="false" />
+        <option name="myGradleHome" value="c:\gradle\gradle-8.14.5" />
       </GradleProjectSettings>
     </option>
   </component>

@@ -101,6 +101,16 @@ class BackupRestoreService : Service() {
     }
 
     /**
+     * Android 15+: dataSync foreground services are limited to 6 hours per day.
+     * When the limit is reached, the service must stop within a few seconds or the app crashes.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Timber.w("Foreground service timeout reached (type=$fgsType); stopping restore")
+        destroyJob()
+        stopSelf()
+    }
+
+    /**
      * This method needs to be implemented, but it's not used/needed.
      */
     override fun onBind(intent: Intent): IBinder? = null

@@ -47,17 +47,9 @@ class BootCompletedReceiver : BroadcastReceiver(), KoinComponent {
             if(preferences.get<Boolean>(R.string.key_audioformat_enhanced_processing) &&
                 !preferences.get<Boolean>(R.string.key_audioformat_processing)) {
 
-                /*
-                    FIXME: When targetting Android 15+, we are not allowed to start a
-                           media_playback/media_projection foreground service from a BOOT_COMPLETED receiver.
-
-                           Possible solutions:
-                            - Also use EngineLauncherActivity for this.
-                              Downside: requires SYSTEM_ALERT_WINDOW permission for the root build
-                            - Better: Use the special use FGS type instead of media_playback for the root service.
-
-                           Ref: https://developer.android.com/about/versions/15/behavior-changes-15#fgs-sysalert
-                 */
+                // Note: Android 15+ does not allow starting mediaPlayback/mediaProjection
+                //       foreground services from BOOT_COMPLETED. RootAudioProcessorService
+                //       uses the specialUse type on Android 14+ for this reason.
                 RootAudioProcessorService.startServiceEnhanced(context)
             }
             else if(preferences.get<Boolean>(R.string.key_audioformat_processing))

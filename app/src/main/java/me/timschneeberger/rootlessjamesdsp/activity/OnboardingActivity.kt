@@ -1,6 +1,7 @@
 package me.timschneeberger.rootlessjamesdsp.activity
 
 import android.os.Bundle
+import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowCompat
 import me.timschneeberger.rootlessjamesdsp.BuildConfig
 import me.timschneeberger.rootlessjamesdsp.R
@@ -15,6 +16,9 @@ class OnboardingActivity : BaseActivity(){
     private lateinit var binding: ActivityOnboardingBinding
     private lateinit var fragment: OnboardingFragment
 
+    // Layout uses fitsSystemWindows to handle insets on its own
+    override val handlesWindowInsets = true
+
     override fun onCreate(savedInstanceState:Bundle?)
     {
         WindowCompat.setDecorFitsSystemWindows(window,false)
@@ -28,6 +32,13 @@ class OnboardingActivity : BaseActivity(){
 
         binding = ActivityOnboardingBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Android 16+: onBackPressed() is no longer called when targeting API 36 (predictive back)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                navigateUp()
+            }
+        })
 
         supportFragmentManager
             .beginTransaction()
@@ -58,10 +69,6 @@ class OnboardingActivity : BaseActivity(){
         if(finished)
             finish()
         return finished
-    }
-
-    override fun onBackPressed() {
-        navigateUp()
     }
 
     override fun onSupportNavigateUp(): Boolean

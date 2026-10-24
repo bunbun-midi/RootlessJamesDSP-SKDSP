@@ -34,7 +34,11 @@ android {
 
         externalNativeBuild {
             cmake {
-                arguments.addAll(listOf("-DANDROID_ARM_NEON=ON"))
+                arguments.addAll(listOf(
+                    "-DANDROID_ARM_NEON=ON",
+                    // Android 15+: align native libraries to 16 KB pages (required by devices using 16 KB page sizes)
+                    "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
+                ))
                 cFlags.add("-std=gnu11 -Wno-incompatible-pointer-types -Wno-implicit-int -Wno-implicit-function-declaration")
             }
         }
@@ -178,12 +182,13 @@ dependencies {
     // Kotlin extensions
     implementation("org.jetbrains.kotlin:kotlin-reflect:2.0.20")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0")
 
     // AndroidX
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.7")
     implementation("androidx.constraintlayout:constraintlayout:2.2.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
@@ -195,7 +200,7 @@ dependencies {
     implementation("androidx.mediarouter:mediarouter:1.7.0")
 
     // Material
-    implementation("com.google.android.material:material:1.9.0")
+    implementation("com.google.android.material:material:1.12.0")
 
     // Dependency injection
     implementation("io.insert-koin:koin-android:3.3.3")
@@ -243,7 +248,8 @@ dependencies {
 
     // Hidden APIs
     implementation("dev.rikka.tools.refine:runtime:${AndroidConfig.rikkaRefineVersion}")
-    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
+    // 6.x no longer hardcodes ART internals; required for Android 15/16
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
     compileOnly(project(":hidden-api-refined"))
     implementation(project(":hidden-api-impl"))
 

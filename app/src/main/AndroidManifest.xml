@@ -221,13 +221,19 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
 
-        <!-- Root only: FGS service permission is granted in root/AndroidManifest.xml -->
+        <!-- Root only: FGS service permissions are granted in root/AndroidManifest.xml.
+             Android 14+ uses the specialUse type, since Android 15 no longer allows starting
+             mediaPlayback services from BOOT_COMPLETED. Older versions use mediaPlayback. -->
         <service
             android:name=".service.RootAudioProcessorService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
-            tools:ignore="ForegroundServicePermission" />
+            android:foregroundServiceType="mediaPlayback|specialUse"
+            tools:ignore="ForegroundServicePermission">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Monitors audio sessions to attach the JamesDSP audio effect (root/Magisk module)" />
+        </service>
 
         <service
             android:name=".service.NotificationListenerService"

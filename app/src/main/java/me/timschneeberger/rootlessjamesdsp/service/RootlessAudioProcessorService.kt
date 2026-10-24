@@ -697,7 +697,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         fun stop(context: Context) {
             try {
-                context.startForegroundService(ServiceNotificationHelper.createStopIntent(context))
+                // Use stopService instead of startForegroundService(ACTION_STOP):
+                // If the service isn't running, starting it as a mediaProjection foreground service
+                // without a fresh projection token throws a SecurityException on Android 14+.
+                // stopService is also allowed from the background, unlike startForegroundService.
+                context.stopService(Intent(context, RootlessAudioProcessorService::class.java))
             }
             catch(ex: Exception) {
                 CrashlyticsImpl.recordException(ex)
