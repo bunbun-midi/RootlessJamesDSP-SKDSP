@@ -15,14 +15,14 @@ android {
 
     val SUPPORTED_ABIS = setOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
     compileSdk = AndroidConfig.compileSdk
-    project.setProperty("archivesBaseName", "RootlessJamesDSP-v${AndroidConfig.versionName}")
+    project.setProperty("archivesBaseName", "SK-DSP-v${AndroidConfig.versionName}")
 
     defaultConfig {
         targetSdk = AndroidConfig.targetSdk
         versionCode = AndroidConfig.versionCode
         versionName = AndroidConfig.versionName
 
-        manifestPlaceholders["label"] = "RootlessJamesDSP"
+        manifestPlaceholders["label"] = "SK DSP"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -92,8 +92,10 @@ android {
         create("rootless") {
             dimension = "version"
 
-            manifestPlaceholders["label"] = "RootlessJamesDSP"
-            applicationId = "me.timschneeberger.rootlessjamesdsp"
+            // Launcher title and package name of this fork. The Kotlin/JNI source namespace
+            // (me.timschneeberger.rootlessjamesdsp) is unchanged; it is independent of the app ID.
+            manifestPlaceholders["label"] = "SK DSP"
+            applicationId = "net.skeyboard.dsp"
             AndroidConfig.minSdk = 29
             minSdk = AndroidConfig.minSdk
             buildConfigField("boolean", "ROOTLESS", "true")
@@ -167,8 +169,29 @@ android {
     namespace = "me.timschneeberger.rootlessjamesdsp"
 }
 
+// Firebase (crash reports) only exists in "full" builds and needs a google-services.json entry for
+// the app's package. The bundled file only contains upstream's apps (me.timschneeberger.rootlessjamesdsp,
+// james.dsp), so for this fork (net.skeyboard.dsp) Firebase processing and symbol uploads are
+// skipped unless you add your own Firebase app to google-services.json. The app then simply runs
+// without crash reporting (see flavor/CrashlyticsImpl.kt in src/full).
+val forkHasFirebaseConfig = file("google-services.json").let {
+    it.exists() && it.readText().contains("\"net.skeyboard.dsp")
+}
+fun isWithoutFirebase(taskName: String) =
+    taskName.contains("Fdroid") || (taskName.contains("Rootless") && !forkHasFirebaseConfig)
+
+tasks.configureEach {
+    if (name.startsWith("process") && name.endsWith("GoogleServices") && isWithoutFirebase(name)) {
+        enabled = false
+    }
+    if (name.contains("Crashlytics") && name.startsWith("upload") && isWithoutFirebase(name)) {
+        enabled = false
+    }
+}
+
 // Hooks to upload native symbols to crashlytics automatically
 afterEvaluate {
+    if (!forkHasFirebaseConfig) return@afterEvaluate // no Firebase app for this fork (see above)
     getTasksByName("bundleRootlessFullRelease", false).firstOrNull()?.finalizedBy("uploadCrashlyticsSymbolFileRootlessFullRelease")
     getTasksByName("bundleRootFullRelease", false).firstOrNull()?.finalizedBy("uploadCrashlyticsSymbolFileRootFullRelease")
     getTasksByName("assembleRootlessFullRelease", false).firstOrNull()?.finalizedBy("uploadCrashlyticsSymbolFileRootlessFullRelease")

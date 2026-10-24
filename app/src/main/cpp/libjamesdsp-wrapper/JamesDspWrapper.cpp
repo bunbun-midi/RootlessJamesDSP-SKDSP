@@ -423,6 +423,16 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setPitchShiftHq
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setRecorderTap(JNIEnv *env, jobject obj, jlong self, jlong tapHandle)
+{
+    // Taking the wrapper lock guarantees the audio thread is not inside the chain while the
+    // pointer changes, so the previous tap can be drained and freed once this returns.
+    DECLARE_DSP_B
+    wrapper->chain.recorder = reinterpret_cast<chain::RecorderTap*>(tapHandle);
+    return true;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
 Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setConvolverMix(JNIEnv *env, jobject obj, jlong self, jfloat wet)
 {
     DECLARE_DSP_B

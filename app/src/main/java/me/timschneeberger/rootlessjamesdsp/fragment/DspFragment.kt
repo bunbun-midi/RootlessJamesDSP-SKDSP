@@ -94,6 +94,10 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     R.xml.speed_shift_preferences
                 ))
             .replace(
+                R.id.card_recorder, PreferenceGroupFragment.newInstance(Constants.PREF_RECORDER,
+                    R.xml.recorder_preferences
+                ))
+            .replace(
                 R.id.card_compressor, PreferenceGroupFragment.newInstance(Constants.PREF_COMPANDER,
                     R.xml.dsp_compander_preferences
                 ))
@@ -153,6 +157,7 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         binding.cardPitchWrapper.isVisible = isRootless()
         binding.cardPitchHqWrapper.isVisible = isRootless()
         binding.cardSpeedShiftWrapper.isVisible = isRootless()
+        binding.cardRecorderWrapper.isVisible = isRootless()
 
         // Load initial preferences
         arrayOf(R.string.key_device_profiles_enable).forEach {

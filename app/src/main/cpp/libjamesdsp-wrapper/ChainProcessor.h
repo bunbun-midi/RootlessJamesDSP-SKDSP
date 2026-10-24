@@ -12,6 +12,7 @@
  *  - a wet/dry mix for the convolver
  *  - a phase-vocoder pitch shifter (PitchShifter.cpp)
  *  - "Pitch Shifter HQ" based on Bungee (BungeeProcessors.cpp)
+ *  - a recorder tap that copies the audio at its position to a WAV writer (RecorderTap.cpp)
  *
  * Everything in here is called while the wrapper mutex is held (see JamesDspWrapper.cpp),
  * so parameter setters and the audio thread never run concurrently.
@@ -24,6 +25,7 @@
 
 #include "PitchShifter.h"
 #include "BungeeProcessors.h"
+#include "RecorderTap.h"
 
 extern "C" {
 #include <jdsp_header.h>
@@ -52,7 +54,8 @@ enum EffectId : int {
     COMPRESSOR = 11,
     PITCH_SHIFT = 12,
     PITCH_SHIFT_HQ = 13, /* Bungee */
-    COUNT = 14
+    RECORDER = 14,
+    COUNT = 15
 };
 
 /* Stereo-linked, feed-forward, log-domain compressor with soft knee
@@ -104,6 +107,7 @@ struct State {
     ConvolverMix convolverMix;
     PitchShifter pitchShifter;
     BungeePitchShifter pitchShifterHq;
+    RecorderTap* recorder = nullptr; /* not owned; see RecorderTap.h */
     bool benchmarkHandled = false;
 };
 

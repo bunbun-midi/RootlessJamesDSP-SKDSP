@@ -47,6 +47,8 @@ object JamesDspWrapper {
     external fun setConvolverMix(self: JamesDspHandle, wet: Float): Boolean
     external fun setPitchShift(self: JamesDspHandle, enable: Boolean, semitones: Float): Boolean
     external fun setPitchShiftHq(self: JamesDspHandle, enable: Boolean, semitones: Float): Boolean
+    /** Attaches a [RecorderTap] handle to the "Recorder" effect block (0 = detach) */
+    external fun setRecorderTap(self: JamesDspHandle, tap: Long): Boolean
 
     // EEL VM utilities
     external fun enumerateEelVariables(self: JamesDspHandle): ArrayList<EelVmVariable>

@@ -19,6 +19,6 @@ class ExampleInstrumentedTest {
     fun useAppContext() {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("me.timschneeberger.rootlessjamesdsp", appContext.packageName)
+        assertEquals("net.skeyboard.dsp", appContext.packageName.removeSuffix(".debug"))
     }
 }

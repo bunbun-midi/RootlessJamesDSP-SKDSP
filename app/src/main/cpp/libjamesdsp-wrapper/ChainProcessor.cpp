@@ -16,7 +16,7 @@ namespace chain {
 
 const int kDefaultOrder[COUNT] = {
     PITCH_SHIFT, PITCH_SHIFT_HQ, TUBE, COMPANDER, COMPRESSOR, BASS_BOOST, MULTI_EQ, ARBITRARY_EQ,
-    CONVOLVER, DDC, LIVEPROG, CROSSFEED, STEREO_WIDE, REVERB
+    CONVOLVER, DDC, LIVEPROG, CROSSFEED, STEREO_WIDE, REVERB, RECORDER
 };
 
 /* 20 / log2(10): converts log2(x) to dB */
@@ -289,6 +289,10 @@ static void orderedProcess(JamesDSPLib* jdsp, size_t n) {
             case PITCH_SHIFT_HQ:
                 if (st->pitchShifterHq.isEnabled())
                     st->pitchShifterHq.process(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
+                break;
+            case RECORDER:
+                if (st->recorder != nullptr)
+                    st->recorder->write(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
                 break;
             default:
                 break;

@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.annotation.StringRes
 import androidx.annotation.XmlRes
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.Preference
@@ -54,6 +55,7 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
     private var reportedProcessingSampleRate: Int? = null
     private var convolverStatusUpdater: (() -> Unit)? = null
     private var speedShiftListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var overlayPermissionListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     private val listener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
@@ -209,6 +211,9 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                 }
             }
             R.xml.speed_shift_preferences -> setupSpeedShift()
+            R.xml.recorder_preferences -> setupOverlayPermissionPrompt(
+                getString(R.string.key_recorder_enable), R.string.recorder_permission_required
+            )
             R.xml.dsp_graphiceq_preferences -> {
                 findPreference<Preference>(getString(R.string.key_geq_nodes))?.setOnPreferenceClickListener {
                     val intent = Intent(requireContext(), GraphicEqualizerActivity::class.java)
@@ -233,29 +238,17 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
 
     private fun setupSpeedShift() {
         val speedPreference = findPreference<MaterialSeekbarPreference>(getString(R.string.key_speed_shift_speed))
-        // seekBarIncrement is an integer attribute (AndroidX), so the 0.05 step is set here
-        speedPreference?.setSeekBarIncrement(SpeedShiftController.SPEED_STEP)
+        // seekBarIncrement is an integer attribute (AndroidX), so fractional steps are set here
+        speedPreference?.setSeekBarIncrement(SpeedShiftController.SPEED_RESOLUTION)
+        findPreference<MaterialSeekbarPreference>(getString(R.string.key_speed_shift_step))
+            ?.setSeekBarIncrement(SpeedShiftController.SPEED_RESOLUTION)
         val bubbleKey = getString(R.string.key_speed_shift_bubble)
         val speedKey = getString(R.string.key_speed_shift_speed)
 
-        speedShiftListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        setupOverlayPermissionPrompt(bubbleKey, R.string.speed_shift_permission_required)
+
+        val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
             when (key) {
-                bubbleKey -> {
-                    // The floating button needs the "display over other apps" permission
-                    if (prefs.getBoolean(bubbleKey, false) && !Settings.canDrawOverlays(requireContext())) {
-                        requireContext().toast(R.string.speed_shift_permission_required)
-                        try {
-                            startActivity(
-                                Intent(
-                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                    Uri.parse("package:${requireContext().packageName}")
-                                )
-                            )
-                        } catch (ex: Exception) {
-                            Timber.e(ex)
-                        }
-                    }
-                }
                 // Keep the slider in sync with swipes on the floating button
                 speedKey -> speedPreference?.let { pref ->
                     val value = prefs.getFloat(speedKey, SpeedShiftController.DEFAULT_SPEED)
@@ -264,14 +257,40 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                 }
             }
         }
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(speedShiftListener)
+        speedShiftListener = prefListener
+        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefListener)
+    }
+
+    /** Floating buttons need the "display over other apps" permission; ask when [enableKey] is switched on */
+    private fun setupOverlayPermissionPrompt(enableKey: String, @StringRes message: Int) {
+        val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            if (key == enableKey && prefs.getBoolean(enableKey, false) && !Settings.canDrawOverlays(requireContext())) {
+                requireContext().toast(message)
+                try {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${requireContext().packageName}")
+                        )
+                    )
+                } catch (ex: Exception) {
+                    Timber.e(ex)
+                }
+            }
+        }
+        overlayPermissionListener = prefListener
+        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefListener)
     }
 
     override fun onResume() {
         super.onResume()
         // Returning from the overlay permission screen: let the service show the button now
-        if (requireArguments().getInt(BUNDLE_XML_RES) == R.xml.speed_shift_preferences)
-            requireContext().sendLocalBroadcast(Intent(Constants.ACTION_SPEED_SHIFT_REFRESH))
+        when (requireArguments().getInt(BUNDLE_XML_RES)) {
+            R.xml.speed_shift_preferences ->
+                requireContext().sendLocalBroadcast(Intent(Constants.ACTION_SPEED_SHIFT_REFRESH))
+            R.xml.recorder_preferences ->
+                requireContext().sendLocalBroadcast(Intent(Constants.ACTION_RECORDER_REFRESH))
+        }
     }
 
     private fun setupConvolverSampleRateFiles() {
@@ -420,6 +439,9 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         prefsApp.unregisterOnSharedPreferenceChangeListener(listener)
         preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(listener)
         speedShiftListener?.let {
+            preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(it)
+        }
+        overlayPermissionListener?.let {
             preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(it)
         }
     }

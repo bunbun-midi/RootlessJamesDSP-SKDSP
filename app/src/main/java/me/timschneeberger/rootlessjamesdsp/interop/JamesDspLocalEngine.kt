@@ -146,6 +146,15 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         return JamesDspWrapper.setPitchShiftHq(handle, enable, semitones)
     }
 
+    /** Attaches a [RecorderTap] to the "Recorder" effect block (0 = detach). Blocks until the
+     *  audio thread is outside the effect chain, so a detached tap can be freed afterwards. */
+    fun setRecorderTap(tap: Long): Boolean
+    {
+        if (handle == 0L)
+            return false
+        return JamesDspWrapper.setRecorderTap(handle, tap)
+    }
+
     override fun setMultiEqualizerInternal(
         enable: Boolean,
         filterType: Int,

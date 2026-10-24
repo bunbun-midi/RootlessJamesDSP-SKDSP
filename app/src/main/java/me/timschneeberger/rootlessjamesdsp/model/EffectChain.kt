@@ -32,7 +32,8 @@ object EffectChain {
         REVERB(10, R.string.reverb_enable, listOf(Constants.PREF_REVERB to R.string.key_reverb_enable)),
         COMPRESSOR(11, R.string.compressor_enable, listOf(Constants.PREF_COMPRESSOR to R.string.key_compressor_enable)),
         PITCH_SHIFT(12, R.string.pitch_enable, listOf(Constants.PREF_PITCH to R.string.key_pitch_enable)),
-        PITCH_SHIFT_HQ(13, R.string.pitch_hq_enable, listOf(Constants.PREF_PITCH_HQ to R.string.key_pitch_hq_enable));
+        PITCH_SHIFT_HQ(13, R.string.pitch_hq_enable, listOf(Constants.PREF_PITCH_HQ to R.string.key_pitch_hq_enable)),
+        RECORDER(14, R.string.recorder_title, listOf(Constants.PREF_RECORDER to R.string.key_recorder_enable));
 
         /** Preference namespaces holding this effect's enable switch */
         val namespaces: List<String>
@@ -47,11 +48,11 @@ object EffectChain {
         }
     }
 
-    /** libjamesdsp's built-in order, plus the pitch shifters first and the compressor after the compander */
+    /** libjamesdsp's built-in order, plus the pitch shifters first, the compressor after the compander and the recorder last */
     val DEFAULT_ORDER = listOf(
         Effect.PITCH_SHIFT, Effect.PITCH_SHIFT_HQ, Effect.TUBE, Effect.COMPANDER, Effect.COMPRESSOR, Effect.BASS_BOOST, Effect.MULTI_EQ,
         Effect.ARBITRARY_EQ, Effect.CONVOLVER, Effect.DDC, Effect.LIVEPROG,
-        Effect.CROSSFEED, Effect.STEREO_WIDE, Effect.REVERB
+        Effect.CROSSFEED, Effect.STEREO_WIDE, Effect.REVERB, Effect.RECORDER
     )
 
     val DEFAULT_ORDER_STRING = serialize(DEFAULT_ORDER)

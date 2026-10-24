@@ -22,8 +22,13 @@ import kotlin.math.roundToInt
 object SpeedShiftController {
     const val MIN_SPEED = 0.25f
     const val MAX_SPEED = 1.0f
-    const val SPEED_STEP = 0.05f
     const val DEFAULT_SPEED = 0.75f
+    /** Speed values are kept on a 0.01 grid (the slider's resolution) */
+    const val SPEED_RESOLUTION = 0.01f
+
+    const val MIN_STEP = 0.01f
+    const val MAX_STEP = 0.25f
+    const val DEFAULT_STEP = 0.05f
 
     fun interface Listener {
         /** Always called on the main thread */
@@ -36,6 +41,11 @@ object SpeedShiftController {
 
     @Volatile
     var speed = DEFAULT_SPEED
+        private set
+
+    /** Speed change per swipe step on the floating button (user setting) */
+    @Volatile
+    var speedStep = DEFAULT_STEP
         private set
 
     /** Audio that has been captured but not played yet, in seconds (written by the audio thread) */
@@ -59,7 +69,7 @@ object SpeedShiftController {
 
     fun toggle() = setActive(!isActive)
 
-    /** Sets the speed (rounded to [SPEED_STEP]); returns true if it changed */
+    /** Sets the speed (clamped, rounded to [SPEED_RESOLUTION]); returns true if it changed */
     fun setSpeed(context: Context, value: Float, persist: Boolean = true): Boolean {
         val quantized = quantize(value)
         if (quantized == speed)
@@ -75,18 +85,21 @@ object SpeedShiftController {
     }
 
     fun loadFromPreferences(context: Context) {
-        val stored = prefs(context).getFloat(context.getString(R.string.key_speed_shift_speed), DEFAULT_SPEED)
+        val prefs = prefs(context)
+        speedStep = roundToResolution(
+            prefs.getFloat(context.getString(R.string.key_speed_shift_step), DEFAULT_STEP).coerceIn(MIN_STEP, MAX_STEP)
+        )
+        val stored = prefs.getFloat(context.getString(R.string.key_speed_shift_speed), DEFAULT_SPEED)
         setSpeed(context, stored, persist = false)
     }
 
     fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(Constants.PREF_SPEED_SHIFT, Context.MODE_PRIVATE)
 
-    fun quantize(value: Float): Float {
-        val steps = (value.coerceIn(MIN_SPEED, MAX_SPEED) / SPEED_STEP).roundToInt()
-        // Round to 2 decimals so that the stored value is exactly e.g. 0.35f
-        return ((steps * SPEED_STEP) * 100f).roundToInt() / 100f
-    }
+    fun quantize(value: Float): Float = roundToResolution(value.coerceIn(MIN_SPEED, MAX_SPEED))
+
+    // Round to 2 decimals so that the stored value is exactly e.g. 0.35f
+    private fun roundToResolution(value: Float): Float = (value / SPEED_RESOLUTION).roundToInt() / 100f
 
     fun formatSpeed(value: Float): String = String.format(Locale.getDefault(), "%.2f×", value)
 

@@ -172,11 +172,14 @@ object ContextExtensions {
         "bWUudGltc2NobmVlYmVyZ2VyLnJvb3RsZXNzamFtZXNkc3AuZGVidWc=",
         "amFtZXMuZHNw", "amFtZXMuZHNwLmRlYnVn")
     private val APPNAME_REFS = setOf("Um9vdGxlc3NKYW1lc0RTUA==", "SmFtZXNEU1A=")
+    // This fork's package names and launcher label (see app/build.gradle.kts)
+    private val FORK_PKGNAMES = setOf("net.skeyboard.dsp", "net.skeyboard.dsp.debug")
+    private val FORK_APPNAMES = setOf("SK DSP")
     fun Context.check(): Int {
         val appName = getAppName()
         if(isPlugin()) return 0
-        if(PKGNAME_REFS.none { decode(it) == packageName }) return 1
-        if(APPNAME_REFS.none { decode(it) == appName }) return 2
+        if(PKGNAME_REFS.none { decode(it) == packageName } && packageName !in FORK_PKGNAMES) return 1
+        if(APPNAME_REFS.none { decode(it) == appName } && appName !in FORK_APPNAMES) return 2
         if(!BuildConfig.DEBUG && packageName.contains("debug")) return 3
         return 0
     }

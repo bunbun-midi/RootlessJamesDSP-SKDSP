@@ -40,6 +40,9 @@ import me.timschneeberger.rootlessjamesdsp.model.preference.AudioEncoding
 import me.timschneeberger.rootlessjamesdsp.model.room.AppBlocklistDatabase
 import me.timschneeberger.rootlessjamesdsp.model.room.AppBlocklistRepository
 import me.timschneeberger.rootlessjamesdsp.model.room.BlockedApp
+import me.timschneeberger.rootlessjamesdsp.recorder.RecorderBubble
+import me.timschneeberger.rootlessjamesdsp.recorder.RecorderController
+import me.timschneeberger.rootlessjamesdsp.recorder.WavRecorder
 import me.timschneeberger.rootlessjamesdsp.model.rootless.SessionRecordingPolicyEntry
 import me.timschneeberger.rootlessjamesdsp.session.rootless.OnRootlessSessionChangeListener
 import me.timschneeberger.rootlessjamesdsp.session.rootless.RootlessSessionDatabase
@@ -114,6 +117,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // Speed shift (floating button)
     private var speedShiftBubble: SpeedShiftBubble? = null
 
+    // Recorder effect block (floating button)
+    private var recorderBubble: RecorderBubble? = null
+    private var wavRecorder: WavRecorder? = null
+
     // Shared preferences
     private val preferences: Preferences.App by inject()
     private val preferencesVar: Preferences.Var by inject()
@@ -156,6 +163,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         filter.addAction(ACTION_SERVICE_HARD_REBOOT_CORE)
         filter.addAction(ACTION_SERVICE_SOFT_REBOOT_CORE)
         filter.addAction(Constants.ACTION_SPEED_SHIFT_REFRESH)
+        filter.addAction(Constants.ACTION_RECORDER_REFRESH)
         registerLocalReceiver(broadcastReceiver, filter)
 
         // Setup shared preferences
@@ -171,6 +179,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         SpeedShiftController.loadFromPreferences(this)
         SpeedShiftController.prefs(this).registerOnSharedPreferenceChangeListener(speedShiftPreferencesListener)
         updateSpeedShiftBubble()
+
+        // Recorder: floating record button if the block is enabled
+        RecorderController.backend = recorderBackend
+        RecorderController.prefs(this).registerOnSharedPreferenceChangeListener(recorderPreferencesListener)
+        updateRecorderBubble()
 
         notificationManager.cancel(Notifications.ID_SERVICE_STARTUP)
 
@@ -244,6 +257,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     override fun onDestroy() {
         isServiceDisposing = true
 
+        // Finish a running file recording before the engine (which feeds it) goes away
+        RecorderController.prefs(this).unregisterOnSharedPreferenceChangeListener(recorderPreferencesListener)
+        if (RecorderController.backend === recorderBackend)
+            RecorderController.backend = null
+        recorderBubble?.hide()
+        recorderBubble = null
+        wavRecorder?.stopBlocking(2000)
+
         // Stop recording and release engine
         stopRecording()
         engine.close()
@@ -289,7 +310,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             _, key ->
         when (key) {
             getString(R.string.key_speed_shift_bubble) -> updateSpeedShiftBubble()
-            getString(R.string.key_speed_shift_speed) -> SpeedShiftController.loadFromPreferences(this)
+            getString(R.string.key_speed_shift_speed),
+            getString(R.string.key_speed_shift_step) -> SpeedShiftController.loadFromPreferences(this)
         }
     }
 
@@ -315,6 +337,94 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             speedShiftBubble = null
             // Without the button there is no way to turn it off again
             SpeedShiftController.setActive(false)
+        }
+    }
+
+    // Recorder preferences listener (kept as a field: SharedPreferences only holds weak references)
+    private val recorderPreferencesListener = SharedPreferences.OnSharedPreferenceChangeListener {
+            _, key ->
+        if (key == getString(R.string.key_recorder_enable))
+            updateRecorderBubble()
+    }
+
+    private val recorderBackend = object : RecorderController.Backend {
+        override fun startRecording() = startFileRecording()
+        override fun stopRecording() = stopFileRecording()
+    }
+
+    // Show or hide the floating record button
+    private fun updateRecorderBubble() {
+        if (isServiceDisposing)
+            return
+
+        val enabled = RecorderController.prefs(this)
+            .getBoolean(getString(R.string.key_recorder_enable), false)
+        if (enabled && Settings.canDrawOverlays(this)) {
+            if (recorderBubble == null) {
+                recorderBubble = try {
+                    RecorderBubble(this).also { it.show() }
+                } catch (ex: Exception) {
+                    Timber.e("Failed to create recorder bubble")
+                    Timber.e(ex)
+                    null
+                }
+            }
+        } else {
+            recorderBubble?.hide()
+            recorderBubble = null
+        }
+
+        // Switching the recorder block off ends a running recording
+        if (!enabled)
+            stopFileRecording()
+    }
+
+    private fun startFileRecording() {
+        if (wavRecorder != null || isServiceDisposing)
+            return
+
+        val floatFormat = RecorderController.prefs(this)
+            .getString(getString(R.string.key_recorder_format), "pcm16") == "float32"
+        val recorder = WavRecorder(
+            this,
+            engine.sampleRate.toInt(),
+            floatFormat,
+            attachTap = { tap -> engine.setRecorderTap(tap) },
+            onFinished = { finished, result -> onFileRecordingFinished(finished, result) }
+        )
+        try {
+            recorder.start()
+        } catch (ex: Exception) {
+            Timber.e("Failed to start recording")
+            Timber.e(ex)
+            toast(getString(R.string.recorder_failed_toast, ex.message ?: ex.javaClass.simpleName))
+            return
+        }
+        wavRecorder = recorder
+        RecorderController.onStarted()
+    }
+
+    private fun stopFileRecording() {
+        wavRecorder?.stop()
+    }
+
+    private fun onFileRecordingFinished(recorder: WavRecorder, result: WavRecorder.Result) {
+        if (wavRecorder === recorder)
+            wavRecorder = null
+
+        when (result) {
+            is WavRecorder.Result.Saved -> {
+                RecorderController.onStopped(result.name)
+                if (result.droppedSeconds >= 0.05f)
+                    toast(getString(R.string.recorder_dropped_toast,
+                        String.format(java.util.Locale.getDefault(), "%.1f s", result.droppedSeconds)))
+                else
+                    toast(getString(R.string.recorder_saved_toast, result.name), false)
+            }
+            is WavRecorder.Result.Failed -> {
+                RecorderController.onStopped(null)
+                toast(getString(R.string.recorder_failed_toast, result.message))
+            }
         }
     }
 
@@ -346,12 +456,20 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private val broadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                ACTION_SAMPLE_RATE_UPDATED -> engine.syncWithPreferences(arrayOf(Constants.PREF_CONVOLVER))
+                ACTION_SAMPLE_RATE_UPDATED -> {
+                    engine.syncWithPreferences(arrayOf(Constants.PREF_CONVOLVER))
+                    // A WAV file has one sample rate; finish the current file if it changed
+                    wavRecorder?.let {
+                        if (it.sampleRate != engine.sampleRate.toInt())
+                            it.stop()
+                    }
+                }
                 ACTION_PREFERENCES_UPDATED -> engine.syncWithPreferences()
                 ACTION_SERVICE_RELOAD_LIVEPROG -> engine.syncWithPreferences(arrayOf(Constants.PREF_LIVEPROG))
                 ACTION_SERVICE_HARD_REBOOT_CORE -> restartRecording()
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
                 Constants.ACTION_SPEED_SHIFT_REFRESH -> updateSpeedShiftBubble()
+                Constants.ACTION_RECORDER_REFRESH -> updateRecorderBubble()
             }
         }
     }

@@ -752,8 +752,24 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="speed_shift_bubble_summary">Shows a floating button while audio processing is on. Tap the button to slow playing audio down (pitch is kept), swipe up or down on it to change the speed, long-press and drag to move it</string>
     <string name="speed_shift_speed">Speed</string>
     <string name="speed_shift_speed_unit">\u00d7</string>
+    <string name="speed_shift_step">Swipe step</string>
     <string name="speed_shift_permission_required">Allow \"Display over other apps\" to show the floating speed button</string>
     <string name="speed_shift_bubble_off_desc">Speed shift off. Tap to slow down to %1$s</string>
     <string name="speed_shift_bubble_on_desc">Speed shift on at %1$s. Tap to turn off, swipe up or down to change speed</string>
     <string name="speed_shift_behind">%1$s behind</string>
+
+    <!-- Recorder -->
+    <string name="recorder_title">Recorder</string>
+    <string name="recorder_summary">Shows a floating record button while audio processing is on. Records the audio at the recorder\'s position in the effect order (before the output gain and limiter) to Music/SK DSP.</string>
+    <string name="recorder_format">Format</string>
+    <string name="recorder_format_pcm16">WAV, 16-bit</string>
+    <string name="recorder_format_float">WAV, 32-bit float (no clipping)</string>
+    <string name="recorder_bubble_idle_desc">Start recording</string>
+    <string name="recorder_bubble_recording_desc">Recording, %1$s. Tap to stop</string>
+    <string name="recorder_idle_value">REC</string>
+    <string name="recorder_saved">Saved</string>
+    <string name="recorder_saved_toast">Recording saved to Music/SK DSP/%1$s</string>
+    <string name="recorder_failed_toast">Recording failed: %1$s</string>
+    <string name="recorder_dropped_toast">Recording saved, but %1$s of audio was lost because the device was too busy</string>
+    <string name="recorder_permission_required">Allow \"Display over other apps\" to show the floating record button</string>
 </resources>

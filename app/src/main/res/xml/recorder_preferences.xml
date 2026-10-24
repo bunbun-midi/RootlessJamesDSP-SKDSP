@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup
+        android:key="@string/key_recorder_enable"
+        android:disableDependentsState="false"
+        android:title="@string/recorder_title"
+        android:summary="@string/recorder_summary"
+        android:icon="@drawable/ic_record_24dp"
+        app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.DropDownPreference
+            android:key="@string/key_recorder_format"
+            android:title="@string/recorder_format"
+            android:entries="@array/recorder_formats"
+            android:entryValues="@array/recorder_format_values"
+            android:defaultValue="pcm16"
+            app:iconSpaceReserved="false"/>
+    </me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup>
+</PreferenceScreen>
