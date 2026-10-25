@@ -35,6 +35,11 @@ import me.timschneeberger.rootlessjamesdsp.flavor.CrashlyticsImpl
 import me.timschneeberger.rootlessjamesdsp.interop.JamesDspLocalEngine
 import me.timschneeberger.rootlessjamesdsp.interop.ProcessorMessageHandler
 import me.timschneeberger.rootlessjamesdsp.interop.SpeedShifter
+import me.timschneeberger.rootlessjamesdsp.interop.BpmDetector
+import me.timschneeberger.rootlessjamesdsp.bpm.BpmController
+import me.timschneeberger.rootlessjamesdsp.bpm.BpmDisplay
+import me.timschneeberger.rootlessjamesdsp.keyboard.KeyboardController
+import me.timschneeberger.rootlessjamesdsp.keyboard.KeyboardPanel
 import me.timschneeberger.rootlessjamesdsp.model.IEffectSession
 import me.timschneeberger.rootlessjamesdsp.model.preference.AudioEncoding
 import me.timschneeberger.rootlessjamesdsp.model.room.AppBlocklistDatabase
@@ -121,6 +126,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private var recorderBubble: RecorderBubble? = null
     private var fileRecorder: AudioFileRecorder? = null
 
+    // Floating BPM display and piano keyboard
+    private var bpmDisplay: BpmDisplay? = null
+    private var keyboardPanel: KeyboardPanel? = null
+
     // Shared preferences
     private val preferences: Preferences.App by inject()
     private val preferencesVar: Preferences.Var by inject()
@@ -164,6 +173,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         filter.addAction(ACTION_SERVICE_SOFT_REBOOT_CORE)
         filter.addAction(Constants.ACTION_SPEED_SHIFT_REFRESH)
         filter.addAction(Constants.ACTION_RECORDER_REFRESH)
+        filter.addAction(Constants.ACTION_OVERLAYS_REFRESH)
         registerLocalReceiver(broadcastReceiver, filter)
 
         // Setup shared preferences
@@ -184,6 +194,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         RecorderController.backend = recorderBackend
         RecorderController.prefs(this).registerOnSharedPreferenceChangeListener(recorderPreferencesListener)
         updateRecorderBubble()
+
+        // BPM display & piano keyboard
+        KeyboardController.backend = keyboardBackend
+        BpmController.prefs(this).registerOnSharedPreferenceChangeListener(overlayPreferencesListener)
+        KeyboardController.prefs(this).registerOnSharedPreferenceChangeListener(overlayPreferencesListener)
+        updateBpmDisplay()
+        updateKeyboardPanel()
 
         notificationManager.cancel(Notifications.ID_SERVICE_STARTUP)
 
@@ -259,6 +276,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         // Finish a running file recording before the engine (which feeds it) goes away
         RecorderController.prefs(this).unregisterOnSharedPreferenceChangeListener(recorderPreferencesListener)
+        BpmController.prefs(this).unregisterOnSharedPreferenceChangeListener(overlayPreferencesListener)
+        KeyboardController.prefs(this).unregisterOnSharedPreferenceChangeListener(overlayPreferencesListener)
+        if (KeyboardController.backend === keyboardBackend)
+            KeyboardController.backend = null
+        bpmDisplay?.hide()
+        bpmDisplay = null
+        BpmController.isEnabled = false
+        keyboardPanel?.hide()
+        keyboardPanel = null
         if (RecorderController.backend === recorderBackend)
             RecorderController.backend = null
         recorderBubble?.hide()
@@ -338,6 +364,68 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             // Without the button there is no way to turn it off again
             SpeedShiftController.setActive(false)
         }
+    }
+
+    // BPM display / keyboard preferences listener (kept as a field: weak references in SharedPreferences)
+    private val overlayPreferencesListener = SharedPreferences.OnSharedPreferenceChangeListener {
+            _, key ->
+        when (key) {
+            getString(R.string.key_bpm_enable) -> updateBpmDisplay()
+            getString(R.string.key_keyboard_enable) -> updateKeyboardPanel()
+            getString(R.string.key_keyboard_target) -> KeyboardController.setCurrentInterval(currentKeyboardTargetInterval())
+        }
+    }
+
+    private fun updateBpmDisplay() {
+        if (isServiceDisposing)
+            return
+        val enabled = BpmController.prefs(this).getBoolean(getString(R.string.key_bpm_enable), false)
+        if (enabled && Settings.canDrawOverlays(this)) {
+            if (bpmDisplay == null)
+                bpmDisplay = BpmDisplay(this).also { it.show() }
+        } else {
+            bpmDisplay?.hide()
+            bpmDisplay = null
+        }
+        // The detector only runs while the display is visible
+        BpmController.isEnabled = bpmDisplay?.isShown == true
+    }
+
+    private fun updateKeyboardPanel() {
+        if (isServiceDisposing)
+            return
+        val enabled = KeyboardController.prefs(this).getBoolean(getString(R.string.key_keyboard_enable), false)
+        if (enabled && Settings.canDrawOverlays(this)) {
+            if (keyboardPanel == null) {
+                KeyboardController.setCurrentInterval(currentKeyboardTargetInterval())
+                keyboardPanel = KeyboardPanel(this).also { it.show() }
+            }
+        } else {
+            keyboardPanel?.hide()
+            keyboardPanel = null
+        }
+    }
+
+    /** Interval of the pitch shifter the keyboard controls (null if that shifter is off) */
+    private fun currentKeyboardTargetInterval(): Int? {
+        val hq = KeyboardController.isHqTarget(this)
+        val prefs = getSharedPreferences(if (hq) Constants.PREF_PITCH_HQ else Constants.PREF_PITCH, Context.MODE_PRIVATE)
+        val enabled = prefs.getBoolean(getString(if (hq) R.string.key_pitch_hq_enable else R.string.key_pitch_enable), false)
+        if (!enabled)
+            return null
+        return prefs.getFloat(getString(if (hq) R.string.key_pitch_hq_semitones else R.string.key_pitch_semitones), 0f)
+            .let { kotlin.math.round(it).toInt() }
+    }
+
+    private val keyboardBackend = KeyboardController.Backend { semitones ->
+        val hq = KeyboardController.isHqTarget(this)
+        engine.setPitchShiftGlide(hq, semitones.toFloat(), KeyboardController.portamentoMs(this))
+        // Store it like the DSP screen does, so the pitch card and presets show the played interval.
+        // (The engine then sees the same value and lets the glide finish.)
+        getSharedPreferences(if (hq) Constants.PREF_PITCH_HQ else Constants.PREF_PITCH, Context.MODE_PRIVATE).edit()
+            .putBoolean(getString(if (hq) R.string.key_pitch_hq_enable else R.string.key_pitch_enable), true)
+            .putFloat(getString(if (hq) R.string.key_pitch_hq_semitones else R.string.key_pitch_semitones), semitones.toFloat())
+            .apply()
     }
 
     // Recorder preferences listener (kept as a field: SharedPreferences only holds weak references)
@@ -472,6 +560,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SERVICE_SOFT_REBOOT_CORE -> requestAudioRecordRecreation()
                 Constants.ACTION_SPEED_SHIFT_REFRESH -> updateSpeedShiftBubble()
                 Constants.ACTION_RECORDER_REFRESH -> updateRecorderBubble()
+                Constants.ACTION_OVERLAYS_REFRESH -> {
+                    updateBpmDisplay()
+                    updateKeyboardPanel()
+                }
             }
         }
     }
@@ -680,6 +772,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             // Speed shift: the shifter is created when slow-down is switched on and destroyed
             // when it is switched off (this also frees the backlog of captured audio)
             var speedShifter = 0L
+            // BPM display: tempo detector on the captured audio (created while the display is shown)
+            var bpmDetector = 0L
 
             try {
                 // Rebuilding the processing pipeline must not overwrite the current
@@ -699,6 +793,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 var speedShiftWasActive = false
                 val shiftInBuffer = FloatArray(bufferSize)
+                val bpmBuffer = FloatArray(bufferSize)
                 val shiftOutBuffer = FloatArray(bufferSize)
                 // While idle, keep playing until the slowed-down backlog has been played (System.nanoTime)
                 var idleSuspendAt = 0L
@@ -868,6 +963,27 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         continue
                     }
 
+                    // Tempo detection on the original (not slowed down) audio
+                    if (BpmController.isEnabled) {
+                        if (bpmDetector == 0L)
+                            bpmDetector = BpmDetector.nativeCreate(sampleRate)
+                        if (bpmDetector != 0L) {
+                            if (BpmController.consumeResetRequest())
+                                BpmDetector.nativeReset(bpmDetector)
+                            val bpmInput = if (encoding == AudioEncoding.PcmShort) {
+                                for (i in 0 until bufferSize)
+                                    bpmBuffer[i] = shortBuffer[i] * (1f / 32768f)
+                                bpmBuffer
+                            } else floatBuffer
+                            BpmDetector.nativeProcess(bpmDetector, bpmInput, blockFrames)
+                            BpmController.publish(BpmDetector.nativeBpm(bpmDetector), BpmDetector.nativeConfidence(bpmDetector))
+                        }
+                    } else if (bpmDetector != 0L) {
+                        BpmDetector.nativeDestroy(bpmDetector)
+                        bpmDetector = 0L
+                        BpmController.publish(0f, 0f)
+                    }
+
                     // Slow down the captured audio before the effect chain, if enabled
                     applySpeedShift()
 
@@ -906,6 +1022,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 Timber.e(e)
                 stopSelf()
             } finally {
+                if (bpmDetector != 0L)
+                    BpmDetector.nativeDestroy(bpmDetector)
                 if (speedShifter != 0L) {
                     SpeedShifter.nativeDestroy(speedShifter)
                     SpeedShiftController.backlogSeconds = 0f

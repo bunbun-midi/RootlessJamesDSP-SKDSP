@@ -94,6 +94,36 @@ struct ConvolverMix {
     std::vector<float> dry;
 };
 
+/* Portamento for the pitch shifters (floating piano keyboard): moves the interval linearly to the
+ * target over a fixed time, advanced once per audio block */
+struct PitchGlide {
+    float current = 0.0f;
+    float target = 0.0f;
+    float semitonesPerSecond = 0.0f;
+    bool active = false;
+
+    void jump(float semitones) { current = target = semitones; active = false; }
+    void glideTo(float semitones, float timeMs) {
+        target = semitones;
+        if (timeMs <= 0.0f || current == target) {
+            jump(semitones);
+            return;
+        }
+        semitonesPerSecond = (target > current ? target - current : current - target) * 1000.0f / timeMs;
+        active = true;
+    }
+    /* Interval at the end of a block of n samples */
+    float advance(size_t n, float fs) {
+        if (active) {
+            const float step = semitonesPerSecond * (float)n / fs;
+            if (current < target) current = current + step >= target ? target : current + step;
+            else current = current - step <= target ? target : current - step;
+            if (current == target) active = false;
+        }
+        return current;
+    }
+};
+
 struct State {
     State();
 
@@ -107,6 +137,7 @@ struct State {
     ConvolverMix convolverMix;
     PitchShifter pitchShifter;
     BungeePitchShifter pitchShifterHq;
+    PitchGlide pitchGlide, pitchGlideHq;
     RecorderTap* recorder = nullptr; /* not owned; see RecorderTap.h */
     bool benchmarkHandled = false;
 };

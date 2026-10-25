@@ -772,6 +772,33 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="recorder_quality">Quality (0 smallest, 10 best)</string>
     <string name="recorder_bitrate">Bitrate</string>
     <string name="recorder_bitrate_unit">\u0020kbps</string>
+
+    <!-- BPM display -->
+    <string name="bpm_display_title">BPM display</string>
+    <string name="bpm_display_summary">Shows the tempo of the playing audio in a floating display while audio processing is on, and the slowed-down tempo while the speed shifter is active. Tap the display to listen again, drag it to move it.</string>
+    <string name="bpm_display_label">BPM</string>
+    <string name="bpm_display_listening">BPM \u00b7 listening</string>
+    <string name="bpm_range">Tempo range</string>
+    <string name="bpm_range_auto">Automatic</string>
+    <string name="bpm_range_70">70\u2013140 BPM</string>
+    <string name="bpm_range_80">80\u2013160 BPM</string>
+    <string name="bpm_range_90">90\u2013180 BPM</string>
+    <string name="bpm_permission_required">Allow \"Display over other apps\" to show the BPM display</string>
+
+    <!-- Piano keyboard -->
+    <string name="keyboard_title">Piano keyboard</string>
+    <string name="keyboard_summary">Floating keyboard that sets the pitch shifter\'s interval while audio processing is on. Top row: \u221212 to +12 semitones (middle C = 0). Bottom row: \u221224 to \u221213, then +12 to +24.</string>
+    <string name="keyboard_target">Controls</string>
+    <string name="keyboard_target_standard">Pitch shifter (low latency)</string>
+    <string name="keyboard_target_hq">Pitch Shifter HQ</string>
+    <string name="keyboard_target_standard_short">Pitch shifter</string>
+    <string name="keyboard_target_hq_short">HQ</string>
+    <string name="keyboard_portamento">Portamento</string>
+    <string name="keyboard_portamento_short">Glide</string>
+    <string name="keyboard_portamento_unit">\u0020ms</string>
+    <string name="keyboard_move">Move keyboard</string>
+    <string name="keyboard_close">Close keyboard</string>
+    <string name="keyboard_permission_required">Allow \"Display over other apps\" to show the piano keyboard</string>
     <string name="recorder_bubble_idle_desc">Start recording</string>
     <string name="recorder_bubble_recording_desc">Recording, %1$s. Tap to stop</string>
     <string name="recorder_idle_value">REC</string>

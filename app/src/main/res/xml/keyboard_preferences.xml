@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup
+        android:key="@string/key_keyboard_enable"
+        android:disableDependentsState="false"
+        android:title="@string/keyboard_title"
+        android:summary="@string/keyboard_summary"
+        android:icon="@drawable/ic_baseline_music_note_24dp"
+        app:iconSpaceReserved="false">
+        <me.timschneeberger.rootlessjamesdsp.preference.DropDownPreference
+            android:key="@string/key_keyboard_target"
+            android:title="@string/keyboard_target"
+            android:entries="@array/keyboard_targets"
+            android:entryValues="@array/keyboard_target_values"
+            android:defaultValue="std"
+            app:iconSpaceReserved="false"/>
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
+            android:key="@string/key_keyboard_portamento"
+            android:title="@string/keyboard_portamento"
+            android:defaultValue="150"
+            app:minValue="0"
+            app:maxValue="2000"
+            app:seekBarIncrement="10"
+            app:precision="0"
+            app:unit="@string/keyboard_portamento_unit"
+            app:allowDividerAbove="false"
+            app:updatesContinuously="false"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"/>
+    </me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup>
+</PreferenceScreen>

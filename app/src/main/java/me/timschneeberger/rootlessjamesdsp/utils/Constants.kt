@@ -10,6 +10,9 @@ object Constants {
     const val PREF_SPEED_SHIFT = "speedshift"
     // Recorder block (not part of presets either)
     const val PREF_RECORDER = "recorder"
+    // BPM display and piano keyboard overlays (not part of presets either)
+    const val PREF_BPM = "bpm"
+    const val PREF_KEYBOARD = "keyboard"
 
     // DSP-relevant preference namespaces
     const val PREF_BASS = "dsp_bass"
@@ -55,6 +58,7 @@ object Constants {
     const val ACTION_BACKUP_RESTORED = BuildConfig.APPLICATION_ID + ".action.backup.RESTORED"
     const val ACTION_SPEED_SHIFT_REFRESH = BuildConfig.APPLICATION_ID + ".action.speedshift.REFRESH"
     const val ACTION_RECORDER_REFRESH = BuildConfig.APPLICATION_ID + ".action.recorder.REFRESH"
+    const val ACTION_OVERLAYS_REFRESH = BuildConfig.APPLICATION_ID + ".action.overlays.REFRESH"
 
     // Intent extras
     const val EXTRA_SAMPLE_RATE = BuildConfig.APPLICATION_ID + ".extra.service.SAMPLE_RATE"

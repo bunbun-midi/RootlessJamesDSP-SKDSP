@@ -57,6 +57,7 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
     private var speedShiftListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var overlayPermissionListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var recorderListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var keyboardListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     private val listener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
@@ -213,6 +214,10 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
             }
             R.xml.speed_shift_preferences -> setupSpeedShift()
             R.xml.recorder_preferences -> setupRecorder()
+            R.xml.bpm_preferences -> setupOverlayPermissionPrompt(
+                getString(R.string.key_bpm_enable), R.string.bpm_permission_required
+            )
+            R.xml.keyboard_preferences -> setupKeyboard()
             R.xml.dsp_graphiceq_preferences -> {
                 findPreference<Preference>(getString(R.string.key_geq_nodes))?.setOnPreferenceClickListener {
                     val intent = Intent(requireContext(), GraphicEqualizerActivity::class.java)
@@ -257,6 +262,23 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
             }
         }
         speedShiftListener = prefListener
+        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefListener)
+    }
+
+    private fun setupKeyboard() {
+        setupOverlayPermissionPrompt(getString(R.string.key_keyboard_enable), R.string.keyboard_permission_required)
+
+        // Keep the portamento slider in sync with the slider on the floating keyboard
+        val portamentoKey = getString(R.string.key_keyboard_portamento)
+        val portamento = findPreference<MaterialSeekbarPreference>(portamentoKey) ?: return
+        val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            if (key == portamentoKey) {
+                val value = prefs.getFloat(portamentoKey, portamento.getValue())
+                if (portamento.getValue() != value)
+                    portamento.setValue(value)
+            }
+        }
+        keyboardListener = prefListener
         preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefListener)
     }
 
@@ -321,6 +343,8 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                 requireContext().sendLocalBroadcast(Intent(Constants.ACTION_SPEED_SHIFT_REFRESH))
             R.xml.recorder_preferences ->
                 requireContext().sendLocalBroadcast(Intent(Constants.ACTION_RECORDER_REFRESH))
+            R.xml.bpm_preferences, R.xml.keyboard_preferences ->
+                requireContext().sendLocalBroadcast(Intent(Constants.ACTION_OVERLAYS_REFRESH))
         }
     }
 
@@ -476,6 +500,9 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
             preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(it)
         }
         recorderListener?.let {
+            preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(it)
+        }
+        keyboardListener?.let {
             preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(it)
         }
     }

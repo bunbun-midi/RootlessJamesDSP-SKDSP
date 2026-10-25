@@ -437,4 +437,24 @@
         <item>vbr</item>
         <item>cbr</item>
     </string-array>
+    <string-array name="bpm_ranges">
+        <item>@string/bpm_range_auto</item>
+        <item>@string/bpm_range_70</item>
+        <item>@string/bpm_range_80</item>
+        <item>@string/bpm_range_90</item>
+    </string-array>
+    <string-array name="bpm_range_values" translatable="false">
+        <item>auto</item>
+        <item>70</item>
+        <item>80</item>
+        <item>90</item>
+    </string-array>
+    <string-array name="keyboard_targets">
+        <item>@string/keyboard_target_standard</item>
+        <item>@string/keyboard_target_hq</item>
+    </string-array>
+    <string-array name="keyboard_target_values" translatable="false">
+        <item>std</item>
+        <item>hq</item>
+    </string-array>
 </resources>

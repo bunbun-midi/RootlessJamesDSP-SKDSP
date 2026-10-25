@@ -49,6 +49,8 @@ object JamesDspWrapper {
     external fun setPitchShiftHq(self: JamesDspHandle, enable: Boolean, semitones: Float): Boolean
     /** Attaches a [RecorderTap] handle to the "Recorder" effect block (0 = detach) */
     external fun setRecorderTap(self: JamesDspHandle, tap: Long): Boolean
+    /** Floating keyboard: enables the (HQ) pitch shifter and glides to [semitones] in [glideMs] */
+    external fun setPitchShiftGlide(self: JamesDspHandle, hq: Boolean, semitones: Float, glideMs: Float): Boolean
 
     // EEL VM utilities
     external fun enumerateEelVariables(self: JamesDspHandle): ArrayList<EelVmVariable>

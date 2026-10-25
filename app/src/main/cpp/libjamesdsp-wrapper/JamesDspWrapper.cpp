@@ -408,6 +408,13 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setPitchShift(JNIEnv *env, jobject obj, jlong self, jboolean enable, jfloat semitones)
 {
     DECLARE_DSP_B
+    auto& glide = wrapper->chain.pitchGlide;
+    // The floating keyboard writes its interval to the preferences too; don't cut a running glide short
+    if (enable && glide.active && glide.target == semitones) {
+        wrapper->chain.pitchShifter.setParams(true, glide.current);
+        return true;
+    }
+    glide.jump(semitones);
     wrapper->chain.pitchShifter.setParams(enable, semitones);
     return true;
 }
@@ -418,7 +425,38 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setPitchShiftHq
     DECLARE_DSP_B
     // Allocates the Bungee stretcher here (settings thread), not on the audio thread
     wrapper->chain.pitchShifterHq.configure(dsp->fs);
+    auto& glide = wrapper->chain.pitchGlideHq;
+    if (enable && glide.active && glide.target == semitones) {
+        wrapper->chain.pitchShifterHq.setParams(true, glide.current);
+        return true;
+    }
+    glide.jump(semitones);
     wrapper->chain.pitchShifterHq.setParams(enable, semitones);
+    return true;
+}
+
+/* Floating piano keyboard: enables the chosen pitch shifter and glides to the interval */
+extern "C" JNIEXPORT jboolean JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setPitchShiftGlide(JNIEnv *env, jobject obj, jlong self, jboolean hq, jfloat semitones, jfloat glideMs)
+{
+    DECLARE_DSP_B
+    semitones = semitones < -24.0f ? -24.0f : (semitones > 24.0f ? 24.0f : semitones);
+    if (hq) {
+        auto& shifter = wrapper->chain.pitchShifterHq;
+        auto& glide = wrapper->chain.pitchGlideHq;
+        shifter.configure(dsp->fs);
+        if (!shifter.isEnabled())
+            glide.jump(0.0f); // was off: glide from the original pitch
+        glide.glideTo(semitones, glideMs);
+        shifter.setParams(true, glide.current);
+    } else {
+        auto& shifter = wrapper->chain.pitchShifter;
+        auto& glide = wrapper->chain.pitchGlide;
+        if (!shifter.isEnabled())
+            glide.jump(0.0f);
+        glide.glideTo(semitones, glideMs);
+        shifter.setParams(true, glide.current);
+    }
     return true;
 }
 

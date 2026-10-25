@@ -283,12 +283,18 @@ static void orderedProcess(JamesDSPLib* jdsp, size_t n) {
                     st->compressor.process(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n, jdsp->fs);
                 break;
             case PITCH_SHIFT:
-                if (st->pitchShifter.isEnabled())
+                if (st->pitchShifter.isEnabled()) {
+                    if (st->pitchGlide.active)
+                        st->pitchShifter.setParams(true, st->pitchGlide.advance(n, jdsp->fs));
                     st->pitchShifter.process(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
+                }
                 break;
             case PITCH_SHIFT_HQ:
-                if (st->pitchShifterHq.isEnabled())
+                if (st->pitchShifterHq.isEnabled()) {
+                    if (st->pitchGlideHq.active)
+                        st->pitchShifterHq.setParams(true, st->pitchGlideHq.advance(n, jdsp->fs));
                     st->pitchShifterHq.process(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
+                }
                 break;
             case RECORDER:
                 // Last in the chain: recorded after the output stage below (exactly what is heard).

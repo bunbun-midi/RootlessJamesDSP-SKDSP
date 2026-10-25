@@ -146,6 +146,14 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         return JamesDspWrapper.setPitchShiftHq(handle, enable, semitones)
     }
 
+    /** Floating keyboard: enables the (HQ) pitch shifter and glides to [semitones] over [glideMs] */
+    fun setPitchShiftGlide(hq: Boolean, semitones: Float, glideMs: Float): Boolean
+    {
+        if (handle == 0L)
+            return false
+        return JamesDspWrapper.setPitchShiftGlide(handle, hq, semitones, glideMs)
+    }
+
     /** Attaches a [RecorderTap] to the "Recorder" effect block (0 = detach). Blocks until the
      *  audio thread is outside the effect chain, so a detached tap can be freed afterwards. */
     fun setRecorderTap(tap: Long): Boolean

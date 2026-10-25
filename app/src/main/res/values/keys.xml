@@ -147,6 +147,13 @@
     <string name="key_recorder_quality" translatable="false">recorder_quality</string>
     <string name="key_recorder_bitrate" translatable="false">recorder_bitrate</string>
 
+    <string name="key_bpm_enable" translatable="false">bpm_enable</string>
+    <string name="key_bpm_range" translatable="false">bpm_range</string>
+
+    <string name="key_keyboard_enable" translatable="false">keyboard_enable</string>
+    <string name="key_keyboard_target" translatable="false">keyboard_target</string>
+    <string name="key_keyboard_portamento" translatable="false">keyboard_portamento</string>
+
     <string name="key_effect_order" translatable="false">effect_order</string>
 
     <string name="key_tube_enable" translatable="false">tube_enable</string>

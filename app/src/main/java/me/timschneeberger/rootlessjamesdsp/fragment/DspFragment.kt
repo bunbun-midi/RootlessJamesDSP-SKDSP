@@ -98,6 +98,14 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     R.xml.recorder_preferences
                 ))
             .replace(
+                R.id.card_bpm, PreferenceGroupFragment.newInstance(Constants.PREF_BPM,
+                    R.xml.bpm_preferences
+                ))
+            .replace(
+                R.id.card_keyboard, PreferenceGroupFragment.newInstance(Constants.PREF_KEYBOARD,
+                    R.xml.keyboard_preferences
+                ))
+            .replace(
                 R.id.card_compressor, PreferenceGroupFragment.newInstance(Constants.PREF_COMPANDER,
                     R.xml.dsp_compander_preferences
                 ))
@@ -158,6 +166,8 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         binding.cardPitchHqWrapper.isVisible = isRootless()
         binding.cardSpeedShiftWrapper.isVisible = isRootless()
         binding.cardRecorderWrapper.isVisible = isRootless()
+        binding.cardBpmWrapper.isVisible = isRootless()
+        binding.cardKeyboardWrapper.isVisible = isRootless()
 
         // Load initial preferences
         arrayOf(R.string.key_device_profiles_enable).forEach {
