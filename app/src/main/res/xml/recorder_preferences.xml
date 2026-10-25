@@ -15,5 +15,38 @@
             android:entryValues="@array/recorder_format_values"
             android:defaultValue="pcm16"
             app:iconSpaceReserved="false"/>
+        <!-- MP3/Ogg only; visibility handled in PreferenceGroupFragment -->
+        <me.timschneeberger.rootlessjamesdsp.preference.DropDownPreference
+            android:key="@string/key_recorder_bitrate_mode"
+            android:title="@string/recorder_bitrate_mode"
+            android:entries="@array/recorder_bitrate_modes"
+            android:entryValues="@array/recorder_bitrate_mode_values"
+            android:defaultValue="vbr"
+            app:iconSpaceReserved="false"/>
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
+            android:key="@string/key_recorder_quality"
+            android:title="@string/recorder_quality"
+            android:defaultValue="7"
+            app:minValue="0"
+            app:maxValue="10"
+            app:seekBarIncrement="1"
+            app:precision="0"
+            app:allowDividerAbove="false"
+            app:updatesContinuously="false"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"/>
+        <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
+            android:key="@string/key_recorder_bitrate"
+            android:title="@string/recorder_bitrate"
+            android:defaultValue="192"
+            app:minValue="64"
+            app:maxValue="320"
+            app:seekBarIncrement="32"
+            app:precision="0"
+            app:unit="@string/recorder_bitrate_unit"
+            app:allowDividerAbove="false"
+            app:updatesContinuously="false"
+            app:showSeekBarValue="true"
+            app:iconSpaceReserved="false"/>
     </me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup>
 </PreferenceScreen>

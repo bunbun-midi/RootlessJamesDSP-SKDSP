@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <jni.h>
 #include <new>
 
@@ -16,7 +17,35 @@ static size_t nextPowerOfTwo(size_t n) {
 RecorderTap::RecorderTap(size_t capacityFrames) :
     capacity(nextPowerOfTwo(std::max<size_t>(capacityFrames, 1024))),
     mask(capacity - 1),
-    ring(capacity * 2, 0.0f) {}
+    ring(capacity * 2, 0.0f),
+    scratchL(16384, 0.0f),
+    scratchR(16384, 0.0f) {}
+
+void RecorderTap::writeLimited(const float* left, const float* right, size_t frames,
+                               float postGain, float threshold, float releaseCoef) {
+    if (limiterEnvelope < threshold)
+        limiterEnvelope = threshold;
+    for (size_t off = 0; off < frames;) {
+        const size_t n = std::min(frames - off, scratchL.size());
+        /* Same envelope follower as the output limiter (processOutputLimiter in ChainProcessor.cpp) */
+        for (size_t i = 0; i < n; i++) {
+            const float xL = left[off + i] * postGain;
+            const float xR = right[off + i] * postGain;
+            float peak = std::max(std::fabs(xL), std::fabs(xR));
+            if (peak < threshold)
+                peak = threshold;
+            if (peak > limiterEnvelope)
+                limiterEnvelope = peak;
+            else
+                limiterEnvelope = peak + releaseCoef * (limiterEnvelope - peak);
+            const float gain = threshold / limiterEnvelope;
+            scratchL[i] = xL * gain;
+            scratchR[i] = xR * gain;
+        }
+        write(scratchL.data(), scratchR.data(), n);
+        off += n;
+    }
+}
 
 void RecorderTap::write(const float* left, const float* right, size_t frames) {
     const uint64_t w = writeIndex.load(std::memory_order_relaxed);

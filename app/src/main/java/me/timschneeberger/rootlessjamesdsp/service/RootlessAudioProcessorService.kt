@@ -42,7 +42,7 @@ import me.timschneeberger.rootlessjamesdsp.model.room.AppBlocklistRepository
 import me.timschneeberger.rootlessjamesdsp.model.room.BlockedApp
 import me.timschneeberger.rootlessjamesdsp.recorder.RecorderBubble
 import me.timschneeberger.rootlessjamesdsp.recorder.RecorderController
-import me.timschneeberger.rootlessjamesdsp.recorder.WavRecorder
+import me.timschneeberger.rootlessjamesdsp.recorder.AudioFileRecorder
 import me.timschneeberger.rootlessjamesdsp.model.rootless.SessionRecordingPolicyEntry
 import me.timschneeberger.rootlessjamesdsp.session.rootless.OnRootlessSessionChangeListener
 import me.timschneeberger.rootlessjamesdsp.session.rootless.RootlessSessionDatabase
@@ -119,7 +119,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     // Recorder effect block (floating button)
     private var recorderBubble: RecorderBubble? = null
-    private var wavRecorder: WavRecorder? = null
+    private var fileRecorder: AudioFileRecorder? = null
 
     // Shared preferences
     private val preferences: Preferences.App by inject()
@@ -263,7 +263,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             RecorderController.backend = null
         recorderBubble?.hide()
         recorderBubble = null
-        wavRecorder?.stopBlocking(2000)
+        fileRecorder?.stopBlocking(2000)
 
         // Stop recording and release engine
         stopRecording()
@@ -380,15 +380,17 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     }
 
     private fun startFileRecording() {
-        if (wavRecorder != null || isServiceDisposing)
+        if (fileRecorder != null || isServiceDisposing)
             return
 
-        val floatFormat = RecorderController.prefs(this)
-            .getString(getString(R.string.key_recorder_format), "pcm16") == "float32"
-        val recorder = WavRecorder(
+        val prefs = RecorderController.prefs(this)
+        val recorder = AudioFileRecorder(
             this,
             engine.sampleRate.toInt(),
-            floatFormat,
+            AudioFileRecorder.Format.fromValue(prefs.getString(getString(R.string.key_recorder_format), null)),
+            variableBitrate = prefs.getString(getString(R.string.key_recorder_bitrate_mode), "vbr") != "cbr",
+            quality = prefs.getFloat(getString(R.string.key_recorder_quality), 7f).toInt(),
+            bitrateKbps = prefs.getFloat(getString(R.string.key_recorder_bitrate), 192f).toInt(),
             attachTap = { tap -> engine.setRecorderTap(tap) },
             onFinished = { finished, result -> onFileRecordingFinished(finished, result) }
         )
@@ -400,20 +402,20 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             toast(getString(R.string.recorder_failed_toast, ex.message ?: ex.javaClass.simpleName))
             return
         }
-        wavRecorder = recorder
+        fileRecorder = recorder
         RecorderController.onStarted()
     }
 
     private fun stopFileRecording() {
-        wavRecorder?.stop()
+        fileRecorder?.stop()
     }
 
-    private fun onFileRecordingFinished(recorder: WavRecorder, result: WavRecorder.Result) {
-        if (wavRecorder === recorder)
-            wavRecorder = null
+    private fun onFileRecordingFinished(recorder: AudioFileRecorder, result: AudioFileRecorder.Result) {
+        if (fileRecorder === recorder)
+            fileRecorder = null
 
         when (result) {
-            is WavRecorder.Result.Saved -> {
+            is AudioFileRecorder.Result.Saved -> {
                 RecorderController.onStopped(result.name)
                 if (result.droppedSeconds >= 0.05f)
                     toast(getString(R.string.recorder_dropped_toast,
@@ -421,7 +423,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 else
                     toast(getString(R.string.recorder_saved_toast, result.name), false)
             }
-            is WavRecorder.Result.Failed -> {
+            is AudioFileRecorder.Result.Failed -> {
                 RecorderController.onStopped(null)
                 toast(getString(R.string.recorder_failed_toast, result.message))
             }
@@ -459,7 +461,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SAMPLE_RATE_UPDATED -> {
                     engine.syncWithPreferences(arrayOf(Constants.PREF_CONVOLVER))
                     // A WAV file has one sample rate; finish the current file if it changed
-                    wavRecorder?.let {
+                    fileRecorder?.let {
                         if (it.sampleRate != engine.sampleRate.toInt())
                             it.stop()
                     }

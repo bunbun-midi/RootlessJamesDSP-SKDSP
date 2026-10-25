@@ -291,8 +291,11 @@ static void orderedProcess(JamesDSPLib* jdsp, size_t n) {
                     st->pitchShifterHq.process(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
                 break;
             case RECORDER:
-                if (st->recorder != nullptr)
-                    st->recorder->write(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
+                // Last in the chain: recorded after the output stage below (exactly what is heard).
+                // Elsewhere: recorded here, with the output stage's gain + limiter applied to the copy.
+                if (st->recorder != nullptr && id != st->order[COUNT - 1])
+                    st->recorder->writeLimited(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n,
+                                               jdsp->postGain, jdsp->limiter.threshold, jdsp->limiter.relCoef);
                 break;
             default:
                 break;
@@ -300,6 +303,9 @@ static void orderedProcess(JamesDSPLib* jdsp, size_t n) {
     }
 
     processOutputLimiter(jdsp, n);
+
+    if (st->recorder != nullptr && st->order[COUNT - 1] == RECORDER)
+        st->recorder->write(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
 
     // Same as JamesDSPProcessCheckBenchmarkReady(): once benchmark results are available,
     // rebuild convolutions to use the optimal partitioning (once).

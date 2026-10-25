@@ -420,9 +420,21 @@
     <string-array name="recorder_formats">
         <item>@string/recorder_format_pcm16</item>
         <item>@string/recorder_format_float</item>
+        <item>@string/recorder_format_mp3</item>
+        <item>@string/recorder_format_ogg</item>
     </string-array>
     <string-array name="recorder_format_values" translatable="false">
         <item>pcm16</item>
         <item>float32</item>
+        <item>mp3</item>
+        <item>ogg</item>
+    </string-array>
+    <string-array name="recorder_bitrate_modes">
+        <item>@string/recorder_bitrate_mode_vbr</item>
+        <item>@string/recorder_bitrate_mode_cbr</item>
+    </string-array>
+    <string-array name="recorder_bitrate_mode_values" translatable="false">
+        <item>vbr</item>
+        <item>cbr</item>
     </string-array>
 </resources>

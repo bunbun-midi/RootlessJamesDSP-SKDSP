@@ -56,6 +56,7 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
     private var convolverStatusUpdater: (() -> Unit)? = null
     private var speedShiftListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var overlayPermissionListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var recorderListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     private val listener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
@@ -211,9 +212,7 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                 }
             }
             R.xml.speed_shift_preferences -> setupSpeedShift()
-            R.xml.recorder_preferences -> setupOverlayPermissionPrompt(
-                getString(R.string.key_recorder_enable), R.string.recorder_permission_required
-            )
+            R.xml.recorder_preferences -> setupRecorder()
             R.xml.dsp_graphiceq_preferences -> {
                 findPreference<Preference>(getString(R.string.key_geq_nodes))?.setOnPreferenceClickListener {
                     val intent = Intent(requireContext(), GraphicEqualizerActivity::class.java)
@@ -258,6 +257,38 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
             }
         }
         speedShiftListener = prefListener
+        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefListener)
+    }
+
+    private fun setupRecorder() {
+        val enableKey = getString(R.string.key_recorder_enable)
+        val formatKey = getString(R.string.key_recorder_format)
+        val modeKey = getString(R.string.key_recorder_bitrate_mode)
+        val qualityKey = getString(R.string.key_recorder_quality)
+        val bitrateKey = getString(R.string.key_recorder_bitrate)
+        setupOverlayPermissionPrompt(enableKey, R.string.recorder_permission_required)
+
+        // Encoding/quality/bitrate only apply to MP3 & Ogg; quality to VBR, bitrate to fixed bitrate
+        val group = findPreference<SwitchPreferenceGroup>(enableKey) ?: return
+        group.childVisibilityFilter = { pref ->
+            val prefs = preferenceManager.sharedPreferences
+            val format = prefs?.getString(formatKey, "pcm16")
+            val compressed = format == "mp3" || format == "ogg"
+            val vbr = prefs?.getString(modeKey, "vbr") != "cbr"
+            when (pref.key) {
+                modeKey -> compressed
+                qualityKey -> compressed && vbr
+                bitrateKey -> compressed && !vbr
+                else -> true
+            }
+        }
+        group.refreshChildrenVisibility()
+
+        val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == formatKey || key == modeKey)
+                group.refreshChildrenVisibility()
+        }
+        recorderListener = prefListener
         preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(prefListener)
     }
 
@@ -442,6 +473,9 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
             preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(it)
         }
         overlayPermissionListener?.let {
+            preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(it)
+        }
+        recorderListener?.let {
             preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(it)
         }
     }

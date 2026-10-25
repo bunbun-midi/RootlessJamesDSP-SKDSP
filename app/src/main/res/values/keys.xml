@@ -143,6 +143,9 @@
 
     <string name="key_recorder_enable" translatable="false">recorder_enable</string>
     <string name="key_recorder_format" translatable="false">recorder_format</string>
+    <string name="key_recorder_bitrate_mode" translatable="false">recorder_bitrate_mode</string>
+    <string name="key_recorder_quality" translatable="false">recorder_quality</string>
+    <string name="key_recorder_bitrate" translatable="false">recorder_bitrate</string>
 
     <string name="key_effect_order" translatable="false">effect_order</string>
 

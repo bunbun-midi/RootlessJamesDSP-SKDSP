@@ -35,6 +35,8 @@ target_link_libraries( # Specifies the target library.
         crashlytics-connector
         jamesdsp
         bungee_static
+        mp3lame
+        vorbis
 
         # Links the target library to the log library
         # included in the NDK.

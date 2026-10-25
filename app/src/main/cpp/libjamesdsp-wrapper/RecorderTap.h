@@ -26,6 +26,12 @@ public:
     /* Audio thread. If the ring is full, the whole block is dropped and counted. */
     void write(const float* left, const float* right, size_t frames);
 
+    /* Audio thread: like write(), but first applies the same post gain + peak limiter as the
+     * output stage (used when the recorder sits in the middle of the chain, where levels can
+     * exceed 0 dBFS; the recording then has the same level safety as the playback). */
+    void writeLimited(const float* left, const float* right, size_t frames,
+                      float postGain, float threshold, float releaseCoef);
+
     /* Writer thread. Reads up to maxFrames interleaved stereo frames; returns the frame count. */
     size_t read(float* interleaved, size_t maxFrames);
 
@@ -39,6 +45,8 @@ private:
     std::atomic<uint64_t> writeIndex{0};
     std::atomic<uint64_t> readIndex{0};
     std::atomic<uint64_t> dropped{0};
+    float limiterEnvelope = 0.0f; /* audio thread only */
+    std::vector<float> scratchL, scratchR;
 };
 
 } // namespace chain
