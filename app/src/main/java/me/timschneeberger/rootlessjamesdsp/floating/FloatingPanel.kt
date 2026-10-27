@@ -32,8 +32,8 @@ import kotlin.math.abs
  */
 abstract class FloatingPanel(
     protected val context: Context,
-    private val positionPrefs: SharedPreferences,
-    private val positionKey: String,
+    protected val positionPrefs: SharedPreferences,
+    protected val positionKey: String,
 ) : KoinComponent {
     private val preferences: Preferences.App by inject()
 
@@ -124,10 +124,11 @@ abstract class FloatingPanel(
     }
 
     /**
-     * Dragging [handle] moves the panel. A touch without movement calls [onTap] (if given).
+     * Dragging [handle] moves the panel and saves its position under [saveKey]. A touch without
+     * movement calls [onTap] (if given).
      */
     @SuppressLint("ClickableViewAccessibility")
-    protected fun makeDraggable(handle: View, onTap: (() -> Unit)? = null) {
+    protected fun makeDraggable(handle: View, onTap: (() -> Unit)? = null, saveKey: String = positionKey) {
         var downX = 0f
         var downY = 0f
         var startX = 0
@@ -156,10 +157,7 @@ abstract class FloatingPanel(
                 }
                 MotionEvent.ACTION_UP -> {
                     if (dragging) {
-                        positionPrefs.edit()
-                            .putInt("${positionKey}_x", params.x)
-                            .putInt("${positionKey}_y", params.y)
-                            .apply()
+                        savePosition(saveKey)
                     } else if (onTap != null) {
                         view.performClick()
                         onTap()
@@ -173,11 +171,40 @@ abstract class FloatingPanel(
     }
 
     private fun clampPosition(view: View) {
-        val screen = screenSize()
         val width = if (params.width > 0) params.width else view.width.takeIf { it > 0 } ?: (120 * density).toInt()
         val height = view.height.takeIf { it > 0 } ?: (60 * density).toInt()
+        clampPosition(width, height)
+    }
+
+    private fun clampPosition(width: Int, height: Int) {
+        val screen = screenSize()
         params.x = params.x.coerceIn(0, (screen.x - width).coerceAtLeast(0))
         params.y = params.y.coerceIn(0, (screen.y - height).coerceAtLeast(0))
+    }
+
+    /** Current window position (top-left, pixels) and width (pixels or WRAP_CONTENT) */
+    protected val windowX get() = params.x
+    protected val windowY get() = params.y
+    protected val windowWidthPx get() = params.width
+
+    /**
+     * Moves and resizes the window. [width] in pixels or WRAP_CONTENT; [size] is the size the
+     * content will have (the view may not be measured yet) and keeps the window on screen.
+     */
+    protected fun setWindow(x: Int, y: Int, width: Int, size: Point) {
+        params.width = width
+        params.x = x
+        params.y = y
+        clampPosition(size.x, size.y)
+        updateLayout()
+    }
+
+    /** Saves the current window position under "<key>_x/_y" */
+    protected fun savePosition(key: String = positionKey) {
+        positionPrefs.edit()
+            .putInt("${key}_x", params.x)
+            .putInt("${key}_y", params.y)
+            .apply()
     }
 
     private fun updateLayout() {

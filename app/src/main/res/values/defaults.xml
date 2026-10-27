@@ -46,6 +46,7 @@
     <string name="default_appearance_app_theme" translatable="false">DEFAULT</string>
     <bool name="default_appearance_nav_hide" translatable="false">false</bool>
     <bool name="default_appearance_show_icons" translatable="false">true</bool>
+    <bool name="default_appearance_hide_descriptions" translatable="false">false</bool>
 
     <!-- Backups -->
     <string name="default_backup_frequency" translatable="false">0</string>
@@ -55,4 +56,4 @@
     <!-- Script editor -->
     <integer name="default_editor_font_size" translatable="false" tools:keep="@integer/default_editor_font_size">13</integer>
 
-</resources>
+</resources>

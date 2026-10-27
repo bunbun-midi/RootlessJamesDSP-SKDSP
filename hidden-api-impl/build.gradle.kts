@@ -1,6 +1,5 @@
 plugins {
     id("com.android.library")
-    id("dev.rikka.tools.refine") version AndroidConfig.rikkaRefineVersion
 }
 
 android {
@@ -28,5 +27,4 @@ android {
 dependencies {
     implementation("dev.rikka.shizuku:api:${AndroidConfig.shizukuVersion}")
     compileOnly(project(":hidden-api-stubs"))
-    compileOnly(project(":hidden-api-refined"))
-}
+}

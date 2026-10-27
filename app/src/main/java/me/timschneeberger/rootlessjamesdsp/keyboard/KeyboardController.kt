@@ -60,4 +60,14 @@ object KeyboardController {
     fun setPortamentoMs(context: Context, ms: Float) {
         prefs(context).edit().putFloat(context.getString(R.string.key_keyboard_portamento), ms).apply()
     }
+
+    /** The floating keyboard is collapsed to a small square (kept across service restarts) */
+    fun isMinimized(context: Context) = prefs(context).getBoolean(KEY_MINIMIZED, false)
+
+    fun setMinimized(context: Context, minimized: Boolean) {
+        if (isMinimized(context) != minimized)
+            prefs(context).edit().putBoolean(KEY_MINIMIZED, minimized).apply()
+    }
+
+    private const val KEY_MINIMIZED = "keyboard_panel_minimized"
 }

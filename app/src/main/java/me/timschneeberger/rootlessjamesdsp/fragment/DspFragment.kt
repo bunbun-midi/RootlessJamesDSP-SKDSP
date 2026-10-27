@@ -165,6 +165,10 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                 R.id.card_reverb, PreferenceGroupFragment.newInstance(Constants.PREF_REVERB,
                     R.xml.dsp_reverb_preferences
                 ))
+            .replace(
+                R.id.card_page_options, PreferenceGroupFragment.newInstance(Constants.PREF_APP,
+                    R.xml.dsp_page_options_preferences
+                ))
             .commit()
 
         // Effect order, compressor, pitch shifter and convolver wet/dry are implemented in the rootless engine only
@@ -236,4 +240,4 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
             return DspFragment()
         }
     }
-}
+}

@@ -7,7 +7,6 @@ plugins {
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
     id("com.google.devtools.ksp") version AndroidConfig.kspVersion
-    id("dev.rikka.tools.refine") version AndroidConfig.rikkaRefineVersion
     id("org.jetbrains.kotlin.plugin.serialization") version "2.1.0"
 }
 
@@ -270,10 +269,12 @@ dependencies {
     "rootImplementation"("com.github.topjohnwu.libsu:core:5.0.4")
 
     // Hidden APIs
-    implementation("dev.rikka.tools.refine:runtime:${AndroidConfig.rikkaRefineVersion}")
-    // 6.x no longer hardcodes ART internals; required for Android 15/16
-    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
-    compileOnly(project(":hidden-api-refined"))
+    // Rootless builds (Google Play) ship no hidden-API bypass and no Rikka Refine runtime; the hidden
+    // AudioEffect members they need are reached via reflection (utils/HiddenAudioEffect).
+    // Root/plugin builds still exempt themselves (flavor/HiddenApiAccess); 6.x no longer hardcodes
+    // ART internals, required for Android 15/16.
+    "rootImplementation"("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
+    "pluginImplementation"("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
     implementation(project(":hidden-api-impl"))
 
     // Debug utilities
@@ -289,4 +290,4 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-}
+}

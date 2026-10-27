@@ -1,10 +1,8 @@
 package me.timschneeberger.rootlessjamesdsp.utils
 
 import android.media.audiofx.AudioEffect
-import android.media.audiofx.AudioEffectHidden
 import android.media.audiofx.DynamicsProcessing
 import android.os.Build.VERSION_CODES
-import dev.rikka.tools.refine.Refine
 import timber.log.Timber
 import java.util.*
 
@@ -16,7 +14,7 @@ class MutedAudioEffectFactory {
             return null
 
         for ((name, uuid) in supportedTypeUuids) {
-            if(!AudioEffectHidden.isEffectTypeAvailable(uuid))
+            if(!HiddenAudioEffect.isEffectTypeAvailable(uuid))
                 continue
 
             try {
@@ -48,15 +46,15 @@ class MutedAudioEffectFactory {
                     }
                 }
                 MuteEffects.Volume -> {
-                    with(AudioEffectHidden(
+                    with(HiddenAudioEffect(
                         volumeHiddenTypeUuid,
-                        AudioEffectHidden.EFFECT_TYPE_NULL,
+                        HiddenAudioEffect.EFFECT_TYPE_NULL,
                         Int.MAX_VALUE,
                         sid)
                     ) {
                         setParameter(VolumeParams.MUTE.ordinal, 1)
                         setParameter(VolumeParams.LEVEL.ordinal, -96)
-                        Refine.unsafeCast(this)
+                        effect
                     }
                 }
             }
@@ -154,7 +152,7 @@ class MutedAudioEffectFactory {
         fun isDeviceCompatible(): Boolean {
             var isCompatible = false
             supportedTypeUuids.forEach {
-                if(AudioEffectHidden.isEffectTypeAvailable(it.value)) {
+                if(HiddenAudioEffect.isEffectTypeAvailable(it.value)) {
                     isCompatible = true
                     Timber.i("isDeviceCompatible: device supports ${it.key}")
                 }
@@ -162,4 +160,4 @@ class MutedAudioEffectFactory {
             return isCompatible
         }
     }
-}
+}

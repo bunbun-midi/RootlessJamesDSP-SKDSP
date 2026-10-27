@@ -5,10 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.audiofx.AudioEffect
-import android.media.audiofx.AudioEffectHidden
 import me.timschneeberger.rootlessjamesdsp.MainApplication
 import me.timschneeberger.rootlessjamesdsp.interop.structure.EelVmVariable
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
+import me.timschneeberger.rootlessjamesdsp.utils.HiddenAudioEffect
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.AudioEffectExtensions.getParameterInt
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.AudioEffectExtensions.setParameter
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.AudioEffectExtensions.setParameterCharBuffer
@@ -45,7 +45,7 @@ class JamesDspRemoteEngine(
         }
     }
 
-    var effect: AudioEffectHidden? = createEffect()
+    var effect: HiddenAudioEffect? = createEffect()
 
     override var enabled: Boolean
         set(value) { effect?.enabled = value }
@@ -70,9 +70,9 @@ class JamesDspRemoteEngine(
         context.registerLocalReceiver(broadcastReceiver, filter)
     }
 
-    private fun createEffect(): AudioEffectHidden {
+    private fun createEffect(): HiddenAudioEffect {
         return try {
-            AudioEffectHidden(EFFECT_TYPE_CUSTOM, EFFECT_JAMESDSP, priority, sessionId)
+            HiddenAudioEffect(EFFECT_TYPE_CUSTOM, EFFECT_JAMESDSP, priority, sessionId)
         } catch (e: Exception) {
             Timber.e("Failed to create JamesDSP effect")
             Timber.e(e)

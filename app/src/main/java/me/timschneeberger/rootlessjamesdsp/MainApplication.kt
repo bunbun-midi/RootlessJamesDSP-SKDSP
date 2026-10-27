@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
-import android.os.Build
 import android.os.StrictMode
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
@@ -22,6 +21,7 @@ import com.pluto.plugins.rooms.db.PlutoRoomsDatabasePlugin
 import fr.bipi.tressence.file.FileLoggerTree
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import me.timschneeberger.rootlessjamesdsp.flavor.HiddenApiAccess
 import me.timschneeberger.rootlessjamesdsp.flavor.CrashlyticsImpl
 import me.timschneeberger.rootlessjamesdsp.flavor.UpdateManager
 import me.timschneeberger.rootlessjamesdsp.model.preference.ThemeMode
@@ -39,14 +39,12 @@ import me.timschneeberger.rootlessjamesdsp.utils.isRoot
 import me.timschneeberger.rootlessjamesdsp.utils.isRootless
 import me.timschneeberger.rootlessjamesdsp.utils.notifications.Notifications
 import me.timschneeberger.rootlessjamesdsp.utils.preferences.Preferences
-import me.timschneeberger.rootlessjamesdsp.utils.sdkAbove
 import me.timschneeberger.rootlessjamesdsp.utils.storage.Cache
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.GlobalContext.startKoin
 import org.koin.dsl.module
-import org.lsposed.hiddenapibypass.HiddenApiBypass
 import timber.log.Timber
 import timber.log.Timber.DebugTree
 import java.io.File
@@ -57,9 +55,8 @@ import java.util.Locale
 
 open class MainApplication : Application(), SharedPreferences.OnSharedPreferenceChangeListener {
     init {
-        sdkAbove(Build.VERSION_CODES.P) {
-            HiddenApiBypass.addHiddenApiExemptions("L")
-        }
+        // Root/plugin builds exempt themselves from hidden-API restrictions; rootless builds don't
+        HiddenApiAccess.enable()
     }
 
     private val prefs: Preferences.App by inject()
@@ -317,4 +314,4 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
         lateinit var instance: MainApplication
             private set
     }
-}
+}

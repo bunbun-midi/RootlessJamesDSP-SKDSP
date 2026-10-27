@@ -25,6 +25,7 @@ import me.timschneeberger.rootlessjamesdsp.activity.LiveprogEditorActivity
 import me.timschneeberger.rootlessjamesdsp.activity.ParametricEqualizerActivity
 import me.timschneeberger.rootlessjamesdsp.activity.LiveprogParamsActivity
 import me.timschneeberger.rootlessjamesdsp.adapter.RoundedRipplePreferenceGroupAdapter
+import me.timschneeberger.rootlessjamesdsp.keyboard.KeyboardController
 import me.timschneeberger.rootlessjamesdsp.liveprog.EelParser
 import me.timschneeberger.rootlessjamesdsp.preference.CompanderPreference
 import me.timschneeberger.rootlessjamesdsp.preference.EqualizerPreference
@@ -58,6 +59,8 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
     private var overlayPermissionListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var recorderListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var keyboardListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    /** Preferences whose summary is an explanation that "Hide descriptions" hides, with that text */
+    private val descriptions = mutableListOf<Pair<Preference, CharSequence?>>()
 
     private val listener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
@@ -69,6 +72,7 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             when(key) {
                 context?.resources?.getString(R.string.key_appearance_show_icons) -> updateIconState()
+                context?.resources?.getString(R.string.key_appearance_hide_descriptions) -> updateDescriptions()
             }
         }
 
@@ -238,9 +242,34 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         }
 
         updateIconState()
+        setupDescriptions()
 
-        preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(listener)
+        // App settings (the page options card) are not effect settings; don't make the engine reload
+        if (args.getString(BUNDLE_PREF_NAME) != Constants.PREF_APP)
+            preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(listener)
         prefsApp.registerOnSharedPreferenceChangeListener(listenerApp)
+    }
+
+    /** Explanations under the floating-control and recorder cards can be hidden from the effects page */
+    private fun setupDescriptions() {
+        val keys = when (requireArguments().getInt(BUNDLE_XML_RES)) {
+            R.xml.power_preferences -> listOf(R.string.key_power_bubble_enable)
+            R.xml.speed_shift_preferences -> listOf(R.string.key_speed_shift_bubble)
+            R.xml.bpm_preferences -> listOf(R.string.key_bpm_enable, R.string.key_bpm_lcd_buttons)
+            R.xml.keyboard_preferences -> listOf(R.string.key_keyboard_enable)
+            R.xml.recorder_preferences -> listOf(R.string.key_recorder_enable) // Recorder A and B
+            else -> return
+        }
+        keys.mapNotNull { findPreference<Preference>(getString(it)) }
+            .forEach { descriptions.add(it to it.summary) }
+        updateDescriptions()
+    }
+
+    private fun updateDescriptions() {
+        if (descriptions.isEmpty())
+            return
+        val hide = prefsApp.get<Boolean>(R.string.key_appearance_hide_descriptions)
+        descriptions.forEach { (pref, text) -> pref.summary = if (hide) null else text }
     }
 
     private fun setupSpeedShift() {
@@ -274,7 +303,11 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         // Keep the portamento slider in sync with the slider on the floating keyboard
         val portamentoKey = getString(R.string.key_keyboard_portamento)
         val portamento = findPreference<MaterialSeekbarPreference>(portamentoKey) ?: return
+        val enableKey = getString(R.string.key_keyboard_enable)
         val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            // Switching the keyboard on shows it full size again (also when the service isn't running)
+            if (key == enableKey && prefs.getBoolean(enableKey, false))
+                KeyboardController.setMinimized(requireContext(), false)
             if (key == portamentoKey) {
                 val value = prefs.getFloat(portamentoKey, portamento.getValue())
                 if (portamento.getValue() != value)

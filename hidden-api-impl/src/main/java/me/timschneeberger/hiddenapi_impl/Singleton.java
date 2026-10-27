@@ -12,7 +12,9 @@ public abstract class Singleton<T> {
                 try {
                     mInstance = create();
                 }
-                catch (Exception ex) {
+                catch (Throwable ex) {
+                    // Also catches LinkageError (e.g. NoSuchMethodError) when a hidden framework
+                    // member is not accessible to this app
                     ex.printStackTrace();
                 }
             }
@@ -26,4 +28,4 @@ public abstract class Singleton<T> {
             throw new NullPointerException();
         return instance;
     }
-}
+}

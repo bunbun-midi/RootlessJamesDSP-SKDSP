@@ -56,15 +56,17 @@ public class ShizukuSystemServerApi {
                     PERMISSION_MANAGER.getOrThrow().grantRuntimePermission(packageName, permissionName, 0, userId);
                     return;
                 }
-                catch (NoSuchMethodError ignored) {}
+                catch (NoSuchMethodError | AbstractMethodError ignored) {}
                 // Retry with old method
                 PERMISSION_MANAGER.getOrThrow().grantRuntimePermission(packageName, permissionName, userId);
             } else {
                 PERMISSION_MANAGER.getOrThrow().grantRuntimePermission(packageName, permissionName, userId);
             }
         }
-        catch(Exception ex) {
-            Log.e("ShizukuSystemServerApi", "Failed to call app ops service");
+        catch(Throwable ex) {
+            // Hidden IPermissionManager not accessible (no hidden-API exemption) or call failed:
+            // grant through the Shizuku shell instead
+            Log.e("ShizukuSystemServerApi", "Failed to call permission manager: " + ex);
             exec("pm grant " + packageName + " " + permissionName);
         }
     }
@@ -96,20 +98,16 @@ public class ShizukuSystemServerApi {
     public static final String APP_OPS_OP_SYSTEM_ALERT_WINDOW = "SYSTEM_ALERT_WINDOW";
 
     public static void AppOpsService_setMode(String op, int packageUid, String packageName, String mode) throws RemoteException {
-        int index = -1;
-
-        try {
-            Method method = Class.forName("android.app.AppOpsManager")
-                    .getMethod("modeToName", int.class);
-
-            for(int i = 0; i <= 10; i++) {
-                if(mode.equals((String)method.invoke(null, i))) {
-                    index = i;
-                    break;
-                }
-            }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        // Public AppOpsManager.MODE_* constants (the hidden AppOpsManager.modeToName() is blocked
+        // for apps targeting Android 9+)
+        int index;
+        switch (mode) {
+            case APP_OPS_MODE_ALLOW: index = android.app.AppOpsManager.MODE_ALLOWED; break;
+            case APP_OPS_MODE_IGNORE: index = android.app.AppOpsManager.MODE_IGNORED; break;
+            case APP_OPS_MODE_DENY: index = android.app.AppOpsManager.MODE_ERRORED; break;
+            case APP_OPS_MODE_DEFAULT: index = android.app.AppOpsManager.MODE_DEFAULT; break;
+            case APP_OPS_MODE_FOREGROUND: index = android.app.AppOpsManager.MODE_FOREGROUND; break;
+            default: throw new IllegalArgumentException("Unknown app op mode: " + mode);
         }
 
         int opIndex = -1;
@@ -141,8 +139,12 @@ public class ShizukuSystemServerApi {
                     index
             );
         }
-        catch(NullPointerException ex) {
-            Log.e("ShizukuSystemServerApi", "Failed to call app ops service");
+        catch(RemoteException ex) {
+            throw ex;
+        }
+        catch(Throwable ex) {
+            // Not accessible or failed: the caller falls back to "appops set" via the Shizuku shell
+            Log.e("ShizukuSystemServerApi", "Failed to call app ops service: " + ex);
             throw new RuntimeException(ex);
         }
     }
@@ -172,4 +174,4 @@ public class ShizukuSystemServerApi {
             Log.d("ShizukuSystemServerApi", ex.toString());
         }
     }
-}
+}

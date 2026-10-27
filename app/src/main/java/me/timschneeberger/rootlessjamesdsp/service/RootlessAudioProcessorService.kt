@@ -382,7 +382,12 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             _, key ->
         when (key) {
             getString(R.string.key_bpm_enable) -> updateBpmDisplay()
-            getString(R.string.key_keyboard_enable) -> updateKeyboardPanel()
+            getString(R.string.key_keyboard_enable) -> {
+                // Switching the keyboard on in the settings shows it full size again
+                if (KeyboardController.prefs(this).getBoolean(getString(R.string.key_keyboard_enable), false))
+                    KeyboardController.setMinimized(this, false)
+                updateKeyboardPanel()
+            }
             getString(R.string.key_keyboard_target) -> KeyboardController.setCurrentInterval(currentKeyboardTargetInterval())
         }
     }

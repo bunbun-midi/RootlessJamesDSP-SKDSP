@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Options for the effects page itself (stored with the app settings) -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.timschneeberger.rootlessjamesdsp.preference.MaterialSwitchPreference
+        android:key="@string/key_appearance_hide_descriptions"
+        android:defaultValue="@bool/default_appearance_hide_descriptions"
+        android:title="@string/hide_descriptions"
+        android:summary="@string/hide_descriptions_summary"
+        app:iconSpaceReserved="false" />
+</PreferenceScreen>

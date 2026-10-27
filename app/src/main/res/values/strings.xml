@@ -813,6 +813,12 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="keyboard_portamento_unit">\u0020ms</string>
     <string name="keyboard_move">Move keyboard</string>
     <string name="keyboard_close">Close keyboard</string>
+    <string name="keyboard_minimize">Minimize keyboard</string>
+    <string name="keyboard_expand">Show keyboard</string>
+
+    <!-- Effects page options -->
+    <string name="hide_descriptions">Hide descriptions</string>
+    <string name="hide_descriptions_summary">Hide the explanations under the floating buttons, BPM display, piano keyboard and recorders</string>
     <string name="keyboard_permission_required">Allow \"Display over other apps\" to show the piano keyboard</string>
     <string name="recorder_bubble_idle_desc">Start recording</string>
     <string name="recorder_bubble_recording_desc">Recording, %1$s. Tap to stop</string>
