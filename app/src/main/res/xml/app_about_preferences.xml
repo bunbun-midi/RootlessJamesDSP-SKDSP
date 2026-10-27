@@ -25,7 +25,7 @@
         android:icon="@drawable/ic_baseline_github_24dp">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="https://github.com/thepbone/RootlessJamesDSP" />
+            android:data="https://github.com/bunbun-midi/RootlessJamesDSP-SKDSP" />
     </Preference>
 
     <Preference
@@ -35,7 +35,7 @@
         android:icon="@drawable/ic_baseline_google_play_24dp">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="https://play.google.com/store/apps/details?id=me.timschneeberger.rootlessjamesdsp" />
+            android:data="https://play.google.com/store/apps/details?id=net.skeyboard.dsp" />
     </Preference>
 
     <Preference
@@ -45,6 +45,7 @@
         android:icon="@drawable/ic_twotone_download_24">
     </Preference>
 
+    <!-- "Contribute translations" (upstream's Crowdin project), hidden in SK DSP
     <Preference
         android:title="@string/credits_project_translate"
         android:summary="@string/credits_project_translate_summary"
@@ -53,10 +54,19 @@
             android:action="android.intent.action.VIEW"
             android:data="https://crowdin.com/project/rootlessjamesdsp" />
     </Preference>
+    -->
 
     <PreferenceCategory
     app:title="@string/credits"
     app:iconSpaceReserved="false">
+    <Preference
+        android:title="@string/credits_sk_dsp"
+        android:summary="Skeyboard Software (@bunbun-midi)"
+        app:iconSpaceReserved="false">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="https://github.com/bunbun-midi" />
+    </Preference>
     <Preference
         android:title="@string/credits_app"
         android:summary="Tim Schneeberger (@thepbone)"
@@ -80,4 +90,4 @@
         app:iconSpaceReserved="false" />
 
 </PreferenceCategory>
-</PreferenceScreen>
+</PreferenceScreen>

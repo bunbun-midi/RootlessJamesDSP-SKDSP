@@ -434,6 +434,7 @@
     <string name="privacy_share_crash_reports_off">Don\'t send crash reports to the developer</string>
     <string name="credits">Credits</string>
     <string name="translators">Translators</string>
+    <string name="credits_sk_dsp">New SK DSP features by</string>
     <string name="credits_app">App &amp; rootless implementation developed by</string>
     <string name="credits_dsp">JamesDSP core algorithm library developed by</string>
     <string name="credits_project_page">Visit project website on GitHub</string>
