@@ -15,6 +15,14 @@
             android:entryValues="@array/bpm_range_values"
             android:defaultValue="auto"
             app:iconSpaceReserved="false"/>
+        <!-- How a target tempo (double-tap on the display) follows the detected tempo -->
+        <me.timschneeberger.rootlessjamesdsp.preference.DropDownPreference
+            android:key="@string/key_bpm_target_mode"
+            android:title="@string/bpm_target_mode"
+            android:entries="@array/bpm_target_modes"
+            android:entryValues="@array/bpm_target_mode_values"
+            android:defaultValue="stable"
+            app:iconSpaceReserved="false"/>
         <me.timschneeberger.rootlessjamesdsp.preference.MaterialSeekbarPreference
             android:key="@string/key_bpm_size"
             android:title="@string/bpm_size"

@@ -437,6 +437,14 @@
         <item>vbr</item>
         <item>cbr</item>
     </string-array>
+    <string-array name="bpm_target_modes">
+        <item>@string/bpm_target_mode_stable</item>
+        <item>@string/bpm_target_mode_follow</item>
+    </string-array>
+    <string-array name="bpm_target_mode_values" translatable="false">
+        <item>stable</item>
+        <item>follow</item>
+    </string-array>
     <string-array name="bpm_ranges">
         <item>@string/bpm_range_auto</item>
         <item>@string/bpm_range_70</item>

@@ -76,7 +76,19 @@ class TempoMatcher(private val sampleRate: Int) {
         if (tempo <= 0f || tempo == lastReported)
             return
         lastReported = tempo
-        val key = capturePos - (DETECTION_DELAY_SECONDS * sampleRate).toLong()
+        addTempo(tempo, capturePos - delayFrames)
+    }
+
+    /** Detection delay in frames (see [DETECTION_DELAY_SECONDS]) */
+    val delayFrames: Long get() = (DETECTION_DELAY_SECONDS * sampleRate).toLong()
+
+    /**
+     * Enters [tempo] as the source tempo from capture position [key] on (used directly by
+     * StableTempoFilter, which decides itself where a tempo starts).
+     */
+    fun addTempo(tempo: Float, key: Long) {
+        if (tempo <= 0f)
+            return
         // A newer estimate replaces everything it would start at or before
         while (count > 0 && keys[count - 1] >= key)
             count--

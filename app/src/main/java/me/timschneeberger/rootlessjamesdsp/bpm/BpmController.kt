@@ -25,6 +25,18 @@ object BpmController {
     @Volatile
     private var resetRequested = false
 
+    /** Target tempo mode: "stable" (one tempo per track, the default) or "follow" (every change) */
+    @Volatile
+    var stableTargetMode = true
+        private set
+
+    fun loadTargetMode(context: Context) {
+        stableTargetMode = prefs(context).getString(context.getString(R.string.key_bpm_target_mode), TARGET_MODE_STABLE) != TARGET_MODE_FOLLOW
+    }
+
+    const val TARGET_MODE_STABLE = "stable"
+    const val TARGET_MODE_FOLLOW = "follow"
+
     fun publish(bpm: Float, confidence: Float) {
         this.bpm = bpm
         this.confidence = confidence

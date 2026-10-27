@@ -55,7 +55,9 @@ import me.timschneeberger.rootlessjamesdsp.session.rootless.RootlessSessionManag
 import me.timschneeberger.rootlessjamesdsp.session.rootless.SessionRecordingPolicyManager
 import me.timschneeberger.rootlessjamesdsp.speedshift.SpeedShiftBubble
 import me.timschneeberger.rootlessjamesdsp.speedshift.SpeedShiftController
+import me.timschneeberger.rootlessjamesdsp.speedshift.StableTempoFilter
 import me.timschneeberger.rootlessjamesdsp.speedshift.TempoMatcher
+import me.timschneeberger.rootlessjamesdsp.speedshift.TrackChangeWatcher
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
 import me.timschneeberger.rootlessjamesdsp.utils.Constants.ACTION_PREFERENCES_UPDATED
 import me.timschneeberger.rootlessjamesdsp.utils.Constants.ACTION_SAMPLE_RATE_UPDATED
@@ -76,6 +78,7 @@ import org.koin.android.ext.android.inject
 import timber.log.Timber
 import java.io.IOException
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -137,6 +140,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     // Floating BPM display and piano keyboard
     private var bpmDisplay: BpmDisplay? = null
     private var keyboardPanel: KeyboardPanel? = null
+    // Track changes of the playing app (stable target tempo mode; needs notification access)
+    @Volatile
+    private var trackChangeWatcher: TrackChangeWatcher? = null
 
     // Shared preferences
     private val preferences: Preferences.App by inject()
@@ -207,6 +213,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // BPM display & piano keyboard
         KeyboardController.backend = keyboardBackend
         BpmController.prefs(this).registerOnSharedPreferenceChangeListener(overlayPreferencesListener)
+        BpmController.loadTargetMode(this)
+        trackChangeWatcher = TrackChangeWatcher(this).also { it.start() }
         KeyboardController.prefs(this).registerOnSharedPreferenceChangeListener(overlayPreferencesListener)
         updateBpmDisplay()
         updateKeyboardPanel()
@@ -287,6 +295,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         RecorderController.prefs(this).unregisterOnSharedPreferenceChangeListener(recorderPreferencesListener)
         RecorderController.prefsB(this).unregisterOnSharedPreferenceChangeListener(recorderPreferencesListener)
         BpmController.prefs(this).unregisterOnSharedPreferenceChangeListener(overlayPreferencesListener)
+        trackChangeWatcher?.stop()
+        trackChangeWatcher = null
         KeyboardController.prefs(this).unregisterOnSharedPreferenceChangeListener(overlayPreferencesListener)
         if (KeyboardController.backend === keyboardBackend)
             KeyboardController.backend = null
@@ -384,6 +394,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             _, key ->
         when (key) {
             getString(R.string.key_bpm_enable) -> updateBpmDisplay()
+            getString(R.string.key_bpm_target_mode) -> BpmController.loadTargetMode(this)
             getString(R.string.key_keyboard_enable) -> {
                 // Switching the keyboard on in the settings shows it full size again
                 if (KeyboardController.prefs(this).getBoolean(getString(R.string.key_keyboard_enable), false))
@@ -870,6 +881,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 var targetWasActive = false
                 var manualGlide = false // gliding back to the manual speed after target mode ended
                 var capturedFrames = 0L // all audio captured by this thread (positions for the tempo map)
+                // Stable target mode: misreadings within a song are filtered, track changes reset it
+                val stableFilter = StableTempoFilter(sampleRate, tempoMatcher.delayFrames)
+                var targetStable = true
+                var silentFrames = 0L
+                var pendingBoundary = -1L // capture position of a track change not yet handled
                 // While idle, keep playing until the slowed-down backlog has been played (System.nanoTime)
                 var idleSuspendAt = 0L
 
@@ -898,9 +914,26 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                             // Start from the speed playing now (1.0 if slow-down was just switched on)
                             val now = if (speedShifter != 0L && speedShiftWasActive) SpeedShiftController.appliedSpeed else 1f
                             tempoMatcher.start(now, BpmController.bpm)
+                            stableFilter.start(BpmController.bpm, capturedFrames)
+                            targetStable = BpmController.stableTargetMode
+                            pendingBoundary = -1L
                             targetWasActive = true
                         }
-                        tempoMatcher.onDetected(BpmController.bpm, capturedFrames)
+                        if (BpmController.stableTargetMode != targetStable) {
+                            // Mode switched while active: the stable filter starts from the current tempo
+                            targetStable = BpmController.stableTargetMode
+                            stableFilter.start(tempoMatcher.playingTempo, capturedFrames)
+                        }
+                        if (targetStable) {
+                            if (pendingBoundary >= 0) {
+                                stableFilter.onBoundary(pendingBoundary)
+                                pendingBoundary = -1L
+                            }
+                            stableFilter.onDetected(BpmController.bpm, BpmController.confidence, capturedFrames)
+                                ?.let { tempoMatcher.addTempo(it.tempo, it.from) }
+                        } else {
+                            tempoMatcher.onDetected(BpmController.bpm, capturedFrames)
+                        }
                         tempoMatcher.next(playPos, target, blockFrames).also {
                             SpeedShiftController.playingBpm = tempoMatcher.playingTempo
                             SpeedShiftController.targetLimited = tempoMatcher.isLimited
@@ -1067,6 +1100,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         // Pending slowed-down audio is stale once playback stopped
                         releaseSpeedShifter()
                         historyCount = 0
+                        // Playback resuming after this counts as a track change (stable target mode)
+                        silentFrames = sampleRate.toLong()
 
                         if(recorder.state == AudioRecord.STATE_INITIALIZED &&
                             recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING)
@@ -1110,6 +1145,32 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         continue
                     }
                     capturedFrames += blockFrames
+
+                    // Stable target tempo mode: a track change (new track info from the playing app,
+                    // or sound after >= 1 s of silence) restarts tempo detection at that point
+                    if (SpeedShiftController.targetBpm > 0f && BpmController.stableTargetMode) {
+                        var peak = 0f
+                        if (encoding == AudioEncoding.PcmShort) {
+                            for (i in 0 until bufferSize) peak = maxOf(peak, abs(shortBuffer[i] * (1f / 32768f)))
+                        } else {
+                            for (i in 0 until bufferSize) peak = maxOf(peak, abs(floatBuffer[i]))
+                        }
+                        var boundary = trackChangeWatcher?.consume() == true
+                        if (peak < SILENCE_PEAK) {
+                            silentFrames += blockFrames
+                        } else {
+                            if (silentFrames >= sampleRate)
+                                boundary = true
+                            silentFrames = 0
+                        }
+                        if (boundary) {
+                            pendingBoundary = capturedFrames - blockFrames
+                            BpmController.requestReset()
+                        }
+                    } else {
+                        silentFrames = 0
+                        trackChangeWatcher?.consume()
+                    }
 
                     // Tempo detection on the original (not slowed down) audio
                     if (BpmController.isEnabled) {
@@ -1348,6 +1409,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     companion object {
         const val SESSION_LOSS_MAX_RETRIES = 1
+        /** Peak level below which captured audio counts as silence (-60 dBFS; track gaps) */
+        private const val SILENCE_PEAK = 0.001f
+
         /** Captured audio kept for priming the speed shifter (SpeedShifter::kPrimeFrames) */
         const val SPEED_SHIFT_PRIME_FRAMES = 8192
 

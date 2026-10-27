@@ -800,6 +800,9 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="bpm_target_field_hint">BPM</string>
     <string name="bpm_target_hint">The speed shifter plays the music at this tempo and follows new tracks once their tempo is detected. It can only slow down, so a target faster than the music plays at 1.00\u00d7.</string>
     <string name="bpm_target_set">Set</string>
+    <string name="bpm_target_mode">Target tempo</string>
+    <string name="bpm_target_mode_stable">Stable: one tempo per song</string>
+    <string name="bpm_target_mode_follow">Follow every tempo change</string>
     <string name="bpm_target_off">Off</string>
     <string name="bpm_target_invalid">Enter a tempo from %1$d to %2$d BPM</string>
     <string name="bpm_range">Tempo range</string>
