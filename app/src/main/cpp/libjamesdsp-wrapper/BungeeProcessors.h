@@ -106,6 +106,10 @@ public:
     static constexpr float kMinSpeed = 0.25f;
     static constexpr float kMaxSpeed = 1.0f;
     static constexpr int kMaxBacklogSeconds = 300; /* 5 min; about 58 MB at 48 kHz */
+    /* At the limit, playback skips ahead once by this much (crossfaded) instead of losing a few
+     * ms in every block, which sounded like continuous glitching */
+    static constexpr int kCapSkipSeconds = 30;
+    static constexpr int kCapFadeFrames = 4800;
 
     /* History start() can use (Bungee's priming at the hand-over may reach back this far) */
     static constexpr int kPrimeFrames = 8192;
@@ -125,6 +129,10 @@ private:
     void processWsola(float* out, int frames, int64_t t0);
     void processBungee(float* out, int frames);
     void handOver(int64_t t0);
+    /* Backlog input for Bungee: the crossfade buffer of a skip first, then the FIFO */
+    int64_t inputAvailable() const { return fifo.size() + (pendingCount - pendingPos); }
+    int popInput(int frames);
+    void skipAhead();
 
     /* WSOLA: Hann windows of 2 hops (21 ms at 48 kHz), 50 % overlap */
     static constexpr int kHop = 512;
@@ -160,6 +168,9 @@ private:
     double fraction = 0.0;
     std::vector<float> inL, inR, outL, outR;
     std::vector<float> scratchBuf, spliceBuf;
+    /* crossfade of a skip at the backlog limit (planar), consumed before the FIFO */
+    std::vector<float> pendL, pendR, fadeAL, fadeAR;
+    int pendingPos = 0, pendingCount = 0;
 };
 
 } // namespace chain

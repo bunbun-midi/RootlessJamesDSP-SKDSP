@@ -7,13 +7,13 @@
 
 namespace chain {
 
-BpmDetector::BpmDetector(int sampleRate) :
+BpmDetector::BpmDetector(int sampleRate, bool asyncEstimate) :
     frameRate((float)sampleRate / kDecimation / kHop),
     frame(kFftSize, 0.0f),
     window(kFftSize), re(kFftSize), im(kFftSize), prevLogMag(kFftSize / 2 + 1, 0.0f),
     bitRev(kFftSize), twRe(kFftSize / 2), twIm(kFftSize / 2),
-    onset(kOnsetFrames, 0.0f),
-    work(kOnsetFrames, 0.0f), acf(kOnsetFrames, 0.0f) {
+    onset(kOnsetFrames, 0.0f), eOnset(kOnsetFrames, 0.0f),
+    work(kOnsetFrames, 0.0f), acf(kOnsetFrames, 0.0f), async(asyncEstimate) {
     for (int i = 0; i < kFftSize; i++)
         window[i] = 0.5f - 0.5f * std::cos(2.0f * (float)M_PI * i / kFftSize);
     int bits = 0;
@@ -28,6 +28,54 @@ BpmDetector::BpmDetector(int sampleRate) :
         twRe[i] = std::cos(-2.0f * (float)M_PI * i / kFftSize);
         twIm[i] = std::sin(-2.0f * (float)M_PI * i / kFftSize);
     }
+    if (async)
+        worker = std::thread(&BpmDetector::workerLoop, this);
+}
+
+BpmDetector::~BpmDetector() {
+    if (worker.joinable()) {
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            quit = true;
+        }
+        wake.notify_one();
+        worker.join();
+    }
+}
+
+void BpmDetector::workerLoop() {
+    for (;;) {
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            wake.wait(lock, [this] { return pending || quit; });
+            if (quit)
+                return;
+            pending = false;
+        }
+        estimateTempo();
+        busy.store(false, std::memory_order_release);
+    }
+}
+
+void BpmDetector::requestEstimate() {
+    /* Audio thread. If the previous estimate is still running, this one is skipped. */
+    if (busy.load(std::memory_order_acquire))
+        return;
+    std::copy(onset.begin(), onset.end(), eOnset.begin());
+    eWrite = onsetWrite;
+    eCount = onsetCount;
+    eStable = stableFrames;
+    eGeneration = generation.load(std::memory_order_relaxed);
+    if (!async) {
+        estimateTempo();
+        return;
+    }
+    busy.store(true, std::memory_order_release);
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        pending = true;
+    }
+    wake.notify_one();
 }
 
 void BpmDetector::reset() {
@@ -36,7 +84,10 @@ void BpmDetector::reset() {
     std::fill(onset.begin(), onset.end(), 0.0f);
     decimAcc = 0.0f; decimCount = 0; frameWrite = 0; hopCounter = 0;
     onsetWrite = 0; onsetCount = 0; framesSinceEstimate = 0; stableFrames = 0;
-    current = 0.0f; candidate = 0.0f; candidateVotes = 0;
+    stableLimit.store(-1);
+    /* the estimate's smoothing state belongs to the estimate thread: it resets itself when it sees
+       the new generation, and drops a result computed before the reset */
+    generation.fetch_add(1);
     bpmOut.store(0.0f);
     confidenceOut.store(0.0f);
 }
@@ -98,16 +149,19 @@ void BpmDetector::analyzeFrame() {
     onsetWrite = (onsetWrite + 1) & (kOnsetFrames - 1);
     if (onsetCount < kOnsetFrames) onsetCount++;
     if (stableFrames < kOnsetFrames) stableFrames++;
+    const int limit = stableLimit.exchange(-1, std::memory_order_relaxed);
+    if (limit >= 0)
+        stableFrames = std::min(stableFrames, limit);
 
     if (++framesSinceEstimate >= (int)frameRate) {
         framesSinceEstimate = 0;
-        estimateTempo();
+        requestEstimate();
     }
 }
 
 double BpmDetector::detrend(int n) {
     /* Subtract a moving average (~0.25 s), keep the positive part */
-    const int start = (onsetWrite - n) & (kOnsetFrames - 1);
+    const int start = (eWrite - n) & (kOnsetFrames - 1);
     const int avgHalf = std::max(1, (int)(0.125f * frameRate));
     double energy = 0.0;
     /* running sum over [i - avgHalf, i + avgHalf] */
@@ -115,10 +169,10 @@ double BpmDetector::detrend(int n) {
     int lo = 0, hi = -1;
     for (int i = 0; i < n; i++) {
         while (hi < std::min(n - 1, i + avgHalf))
-            sum += onset[(start + ++hi) & (kOnsetFrames - 1)];
+            sum += eOnset[(start + ++hi) & (kOnsetFrames - 1)];
         while (lo < i - avgHalf)
-            sum -= onset[(start + lo++) & (kOnsetFrames - 1)];
-        const float v = onset[(start + i) & (kOnsetFrames - 1)] - (float)(sum / (hi - lo + 1));
+            sum -= eOnset[(start + lo++) & (kOnsetFrames - 1)];
+        const float v = eOnset[(start + i) & (kOnsetFrames - 1)] - (float)(sum / (hi - lo + 1));
         work[i] = v > 0.0f ? v : 0.0f;
         energy += (double)work[i] * work[i];
     }
@@ -134,8 +188,8 @@ double BpmDetector::detrend(int n) {
  * Leaves `work` holding the detrended onsets of the refinement window.
  */
 float BpmDetector::refineLag(float lag, int minLag, int maxLag) {
-    const int coarseN = std::min(onsetCount, (int)(8.0f * frameRate));
-    const int m = std::max(coarseN, std::min({stableFrames, onsetCount, kOnsetFrames - 1, (int)(20.0f * frameRate)}));
+    const int coarseN = std::min(eCount, (int)(8.0f * frameRate));
+    const int m = std::max(coarseN, std::min({eStable, eCount, kOnsetFrames - 1, (int)(20.0f * frameRate)}));
     if (m != coarseN && detrend(m) < 1e-6)
         return lag;
     const int minOverlap = (int)(4.0f * frameRate);
@@ -182,7 +236,14 @@ float BpmDetector::refineLag(float lag, int minLag, int maxLag) {
 }
 
 void BpmDetector::estimateTempo() {
-    const int n = std::min(onsetCount, (int)(8.0f * frameRate));
+    const unsigned gen = eGeneration;
+    if (gen != workerGeneration) {
+        /* reset() since the last estimate */
+        workerGeneration = gen;
+        current = 0.0f; candidate = 0.0f; candidateVotes = 0;
+    }
+    auto stale = [&] { return generation.load(std::memory_order_relaxed) != gen; };
+    const int n = std::min(eCount, (int)(8.0f * frameRate));
     const int maxLag = (int)std::ceil(60.0f * frameRate / kMinBpm);
     const int minLag = (int)std::floor(60.0f * frameRate / kMaxBpm);
     if (n < (int)(4.0f * frameRate) || 2 * maxLag + 2 >= n)
@@ -191,8 +252,10 @@ void BpmDetector::estimateTempo() {
     const double energy = detrend(n);
     if (energy < 1e-6) {
         /* silence */
-        stableFrames = 0;
         current = 0.0f;
+        if (stale())
+            return;
+        stableLimit.store(0);
         bpmOut.store(0.0f);
         confidenceOut.store(0.0f);
         return;
@@ -263,7 +326,7 @@ void BpmDetector::estimateTempo() {
             current = estimate;
             candidateVotes = 0;
             /* a new tempo: only the last ~4 s are known to belong to it */
-            stableFrames = std::min(stableFrames, (int)(4.0f * frameRate));
+            stableLimit.store((int)(4.0f * frameRate));
         }
         candidate = estimate;
     } else {
@@ -271,6 +334,8 @@ void BpmDetector::estimateTempo() {
         candidateVotes = 0;
     }
 
+    if (stale())
+        return;
     bpmOut.store(current);
     confidenceOut.store(conf);
 }

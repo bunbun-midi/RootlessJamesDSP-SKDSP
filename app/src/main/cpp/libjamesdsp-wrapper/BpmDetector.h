@@ -13,18 +13,29 @@
  * 0.01 % (needed to match a target tempo).
  * No allocations after construction; about a millisecond per estimate.
  *
+ * The estimate (about 1.5 ms on a desktop CPU, several ms on a phone) runs on a worker thread:
+ * once per second the audio thread hands over a copy of the onset history and continues, so
+ * the audio thread only does the cheap per-block analysis (tens of microseconds).
+ *
  * Any thread: bpm()/confidence() read the latest (smoothed) result.
  */
 
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 namespace chain {
 
 class BpmDetector {
 public:
-    explicit BpmDetector(int sampleRate);
+    /* asyncEstimate = false runs the estimate inline (deterministic, for tests) */
+    explicit BpmDetector(int sampleRate, bool asyncEstimate = true);
+    ~BpmDetector();
+    BpmDetector(const BpmDetector&) = delete;
+    BpmDetector& operator=(const BpmDetector&) = delete;
 
     void process(const float* interleaved, int frames);
     void reset();
@@ -43,6 +54,8 @@ public:
 
 private:
     void analyzeFrame();
+    void requestEstimate();
+    void workerLoop();
     void estimateTempo();
     void fft(float* re, float* im) const;
     /* Detrended onsets of the last n frames into `work`; returns their energy */
@@ -63,18 +76,34 @@ private:
     std::vector<int> bitRev;
     std::vector<float> twRe, twIm;
 
-    /* onset envelope */
+    /* onset envelope (audio thread) */
     std::vector<float> onset;     /* circular, kOnsetFrames */
     int onsetWrite = 0;
     int onsetCount = 0;
     int framesSinceEstimate = 0;
     int stableFrames = 0;         /* onset frames since the tempo last changed (jump/silence/reset) */
-    std::vector<float> work, acf;
 
-    /* result smoothing */
+    /* estimate input: copy of the onset state, written by the audio thread while !busy */
+    std::vector<float> eOnset;
+    int eWrite = 0, eCount = 0, eStable = 0;
+    unsigned eGeneration = 0;
+
+    /* estimate state (worker thread, or the audio thread when not async) */
+    std::vector<float> work, acf;
+    unsigned workerGeneration = 0;
     float current = 0.0f;
     float candidate = 0.0f;
     int candidateVotes = 0;
+
+    /* hand-over */
+    const bool async;
+    std::atomic<bool> busy{false};
+    std::atomic<unsigned> generation{0};    /* incremented by reset() */
+    std::atomic<int> stableLimit{-1};       /* estimate -> audio thread: cap stableFrames */
+    std::mutex mutex;
+    std::condition_variable wake;
+    bool pending = false, quit = false;
+    std::thread worker;
 
     std::atomic<float> bpmOut{0.0f};
     std::atomic<float> confidenceOut{0.0f};

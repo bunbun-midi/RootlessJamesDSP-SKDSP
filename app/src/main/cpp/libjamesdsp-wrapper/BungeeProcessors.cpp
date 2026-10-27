@@ -184,6 +184,10 @@ SpeedShifter::SpeedShifter(int sampleRate) :
     outRing.assign((size_t)kMatchFrames * 2, 0.0f);
     scratchBuf.assign((size_t)kMaxBlockFrames * 2, 0.0f);
     spliceBuf.assign((size_t)kSpliceFrames * 2, 0.0f);
+    pendL.assign(kCapFadeFrames, 0.0f);
+    pendR.assign(kCapFadeFrames, 0.0f);
+    fadeAL.assign(kCapFadeFrames, 0.0f);
+    fadeAR.assign(kCapFadeFrames, 0.0f);
     window.resize(2 * kHop);
     for (int i = 0; i < 2 * kHop; i++)
         window[i] = 0.5f - 0.5f * std::cos(kPi * (float)i / (float)kHop); /* periodic Hann, N = 2 hops */
@@ -193,6 +197,7 @@ SpeedShifter::~SpeedShifter() = default;
 
 void SpeedShifter::reset() {
     fifo.clear();
+    pendingPos = pendingCount = 0;
     fraction = 0.0;
     stream = std::make_unique<SpeedStream>(sampleRate);
     backlog.store(0);
@@ -357,8 +362,8 @@ void SpeedShifter::processBungee(float* out, int frames) {
         const double want = n * speed + fraction;
         int k = (int)std::floor(want);
         fraction = want - k;
-        k = (int)std::min<int64_t>(std::max(k, 1), fifo.size());
-        const int popped = fifo.pop(inL.data(), inR.data(), k);
+        k = (int)std::min<int64_t>(std::max(k, 1), inputAvailable());
+        const int popped = popInput(k);
 
         const float* inPtr[2] = {inL.data(), inR.data()};
         float* outPtr[2] = {outL.data(), outR.data()};
@@ -392,6 +397,7 @@ void SpeedShifter::handOver(int64_t t0) {
         p += n;
     }
     fifo.clear();
+    pendingPos = pendingCount = 0;
     for (int64_t p = e; p < written;) {
         const int n = (int)std::min<int64_t>(written - p, kMaxBlockFrames);
         ringCopy(p, n, scratch(n));
@@ -447,11 +453,50 @@ void SpeedShifter::process(const float* in, float* out, int frames) {
         processBungee(out, frames);
     }
 
-    // Bound memory: skip the oldest audio if the backlog exceeds the limit
-    const int64_t maxFrames = (int64_t)kMaxBacklogSeconds * sampleRate;
-    if (fifo.size() > maxFrames)
-        fifo.drop(fifo.size() - maxFrames);
-    backlog.store(fifo.size() + kBungeeDelay);
+    // Bound memory: at the limit, skip ahead once (see skipAhead)
+    if (inputAvailable() > (int64_t)kMaxBacklogSeconds * sampleRate)
+        skipAhead();
+    backlog.store(inputAvailable() + kBungeeDelay);
+}
+
+int SpeedShifter::popInput(int frames) {
+    int done = 0;
+    if (pendingPos < pendingCount) {
+        const int m = std::min(frames, pendingCount - pendingPos);
+        std::copy(pendL.begin() + pendingPos, pendL.begin() + pendingPos + m, inL.begin());
+        std::copy(pendR.begin() + pendingPos, pendR.begin() + pendingPos + m, inR.begin());
+        pendingPos += m;
+        done = m;
+    }
+    if (done < frames)
+        done += fifo.pop(inL.data() + done, inR.data() + done, frames - done);
+    return done;
+}
+
+void SpeedShifter::skipAhead() {
+    /*
+     * The backlog is full: drop kCapSkipSeconds of the audio waiting to be played, once. The audio
+     * up to the skip (A, next to be played) is crossfaded into the audio after it (B) over
+     * kCapFadeFrames (equal power), so playback continues without a click; Bungee just sees a
+     * smooth transition. Then the backlog has room for kCapSkipSeconds / (1 - speed) of playing.
+     */
+    if (pendingPos < pendingCount)
+        return; /* still playing the previous crossfade */
+    const int n = (int)std::min<int64_t>(kCapFadeFrames, fifo.size() / 4);
+    if (n <= 0)
+        return;
+    fifo.pop(fadeAL.data(), fadeAR.data(), n);
+    fifo.drop((int64_t)kCapSkipSeconds * sampleRate);
+    const int got = fifo.pop(pendL.data(), pendR.data(), n);
+    for (int i = 0; i < n; i++) {
+        const float x = ((float)i + 0.5f) / (float)n;
+        const float gIn = std::sin(0.5f * kPi * x), gOut = std::cos(0.5f * kPi * x);
+        const float bL = i < got ? pendL[i] : 0.0f, bR = i < got ? pendR[i] : 0.0f;
+        pendL[i] = fadeAL[i] * gOut + bL * gIn;
+        pendR[i] = fadeAR[i] * gOut + bR * gIn;
+    }
+    pendingPos = 0;
+    pendingCount = n;
 }
 
 } // namespace chain

@@ -1,3 +1,4 @@
+
 <h1 align="center">
   <img alt="Icon" width="75" src="https://github.com/thepbone/RootlessJamesDSP/blob/master/img/icons/web/icon-192.png?raw=true">
   <br>
@@ -5,47 +6,34 @@
   <br>
 </h1>
 <h4 align="center">System-wide JamesDSP implementation for non-rooted Android devices - with new speed shifting, pitchshifter, compressor, effects reordering, floating recorders, bpm detection, and keyboard input for pitchshifters.</h4>
-<p align="center">
-  <a href="https://play.google.com/store/apps/details?id=net.skeyboard.dsp">
-  	<img alt="Google play release" src="https://img.shields.io/github/v/release/ThePBone/RootlessJamesDSP?label=google%20play">
-  </a>
-  <a href="https://f-droid.org/packages/me.timschneeberger.rootlessjamesdsp/">
-  	<img alt="F-Droid release" src="https://img.shields.io/f-droid/v/me.timschneeberger.rootlessjamesdsp">
-  </a>
-  <a href="https://github.com/bunbun-midi/RootlessJamesDSP-SKDSP/blob/master/LICENSE">
-      <img alt="License" src="https://img.shields.io/github/license/ThePBone/RootlessJamesDSP">
-  </a>
-    <a href="https://github.com/bunbun-midi/RootlessJamesDSP-SKDSP/actions/workflows/build.yml">
-      <img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/thepbone/rootlessjamesdsp/build.yml">
-  </a>
+<h4 align="left">also by me: <a href="https://play.google.com/store/apps/details?id=net.skeyboard.filemgr>explorer 95 windowing file manager [android] w/ dj mixing / raster image pixel editor /  video editor / text editor </a></h4>
 
-</p>
-<p align="center">
-  <a href="#limitations">Limitations</a> •
-  <a href="#spotify-support-patch">Spotify patch</a> •
-  <a href="#downloads">Downloads</a> •
-  <a href="#credits">Credits</a>
-</p>
+<h5><a href="https://play.google.com/store/apps/details?id=net.skeyboard.midigitaru>guitarchord / midichord - midi-out over usbc otg interfaces / midi-mpe / pitchbending / omnichord / guitar fretting synth for android </a></h5>
 
-<p align="center">
-  <a href='https://play.google.com/store/apps/details?id=net.skeyboard.dsp'> 
-    <img width="300" alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png'/>
-  </a>
-</p>
+soooo i'll tell you a little bit about this: The speed shifting feature is legit! You can double tap the BPM floating overlay to set a target BPM that tracks that play subsequently will be speed shifted to (pitch preserved).
+You have to use shizuku to activate RootlessJamesDSP the first time, and if you uninstall and reinstall you'll have to do that again. I'm pretty sure the wireless debugging shizuku activation method isn't gonna work (didn't for me due to some kinda ssh library?), so you'll have to run a command something like the following while you're connected to your computer via usb tethering.
+1) Under android settings - mobile hotspot and tethering, "USB tethering" has to be toggled On.
+2) Settings -> About Phone -> Software information -> Tap Build Number a Bunch -> Now you're a Developer
+3) Settings -> Developer Options -> USB debugging -> On
+4) Connect Phone
+5) Install Shizuku
+6) Open Shizuku
+7) Start by connecting to a computer -> View command
+8) I'm not sure if this command is going to work... ask Perplexity for help. You're essentially going to run that libshizuku.so script which is what I did but my Shizuku told me to do "adb shell sh /storage/emulated/0/Android/data/moe.shizuku.privileged.api/start.sh" which didn't quite work for me. I think the command might have been oriented towards Linux users or assumed something. Might seem silly but just ask Perplexity for help, I don't think I can start Shizuku for you, I'm past that step already haha-
+9) Well, this is what I ran: it's one line.
+adb -s R5CWB2R1GNX shell /data/app/~~DE5Pxnc2SGIdC-VFQcRvqg==/moe.shizuku.privileged.api-SQPXAcKndLSmYLumnGz53A==/lib/arm64/libshizuku.so
 
-<p align="center">
-This app uses <a href="https://github.com/james34602/JamesDSPManager">libjamesdsp</a> which is written by <a href="https://github.com/james34602">James Fung (@james34602)</a>.
-</p>
+So these are the new features:
+1) Effect order - you can now choose which order the effects get processed in!
+2) Speed Shift - this is key!  listen to music slowed down cause it's better that way! sometimes you just wanna listen to some nice tunes slowed down without having a local file cued up. well, now you can. you weren't before, were you? haha! i gotchu! but seriously consider buying Explorer 95 and guitarchord in the future if you like this project...... please.... my checking account has under $200 in it (verified true fact as of time of writing - *other voice aside* mmm yeah it's true - bunbun's checking account is legit under two hundred!)
+-speed shift will show a floating icon that you can drag up and down upon in order to shift the speed. Long press and then drag any of the floating icons to move them. You can configure the swipe step with the sum of a 0.01x scale and an 0.001x scale slider which allow 0 levels. I like mine set at 0.01x.
+3) Bpm Display - if you double tap on this you can set a target BPM. It also shows the adjusted BPM and a slider on the effects block lets you change its size. The speed shifter will hold a backlog and after like 20 minutes you'd better just toggle it on and off cause we can't hold an infinitely long backlog of uncompressed waves (playback continues at normal speed but the DSP plays it back slower) so it'll skip forwards 30 seconds with a 0.1s fade and continue from there each time the backlog runs out. Sometimes the BPM might not target correctly due to the detected BPM being incorrect so you can just manually adjust it via the speed slider.
+Recorder A & B - I put two recorders in so you can record wet / dry copies of the same mix. They sync (start recording at the same time). You can rearrange them in the effects but usually Recorder A is at the end of the signal chain and Recorder B is at the beginning (pre-effect). You might need to nudge in post if you're legit mixing these two together.
+4) Pitch Shifter - this shifts the pitch of the audio without changing the tempo. There are two, Pitch shifter, and Pitch Shifter HQ.
+Piano Keyboard - you can control either pitch shifter with this, it brings up a four octave keyboard of two rows of two octaves which will be self explanatory as the semitones are marked on all six of the C keys. There's a portamento slider to specify your pitchshift interpolation time. You should definitely use Pitch Shifter HQ if it works well on your phone, works fine on my budget 2025 year tester phone. The "x" button in the upper right actually minimizes the keyboard then you can tap on the minimized music note icon to...... bring it back!
+5) Compressor - believe it or not this is new haha! yeah you can adjust threshold, ratio, attack, release, knee width, makeup gain, yeah whatever, it's just a compressor, i'm not charging you anything for this, no upsell, it's on me lol. Yeah so if you didn't know, compressors compress the audio above the threshold by the ratio. A higher ratio means more compression. The makeup gain is like, the gain after the compressor. If you're bumping the bass and it's clipping, maybe set the threshhold like, idk, -10 dB, ratio like 8:0? Just know that if the bass is causing compression then you're gonna be compressing the highs and mids in their volume level as well. Well, you know, it's a compressor. Iunno just ignore this description if you already know.
 
-<p align="center">
-    This app has several limitations that may be deal-breaking to some people; please read this whole document before using the app.</i>
-</p>
-
-<p align="center">
-   <img alt="Screenshot" width="250" src="img/screenshot1.png">
-   <img alt="Screenshot" width="250" src="img/screenshot7.png">
-</p>
-
+um yeah here's the rest of the readme.md you can read this if you want I didn't change any of the stuff text wise that looks like I didn't write it but I did remove some hotlinked images cause I don't believe in that (well it's real i just don't think it's very cash money to make someone's server send you multiple tens of kB expending their currents to see a little picture that you didn't need lol)
 
 ## Limitations
 * Apps blocking internal audio capture remain unprocessed (e.g., Spotify, Google Chrome)
@@ -126,22 +114,12 @@ This is the reason why a special patch is required to disable this DRM restricti
 
 ## Translations
 
-This application can be translated via Crowdin: https://crowdin.com/project/rootlessjamesdsp
-
-Not all languages are enabled at the moment in Crowdin. To request a new language, please open an issue here on GitHub.
-
+Yeah I'll translate it... just show up to Github Issues here tellin' me some sacre bleu i cannot comprehende dis Kompressor ist das ein Auto??? Was ist dis Pitch Shiften??? I need die interface to be in mein language! But seriously viel gluck englisch ist schwer lmao but realistically if you could give me a pull request for the strings.xml with some well written text to explain things for the people in your country that would be helpful (not for me, for them, i don't want to do anything! i'm forced to help! i have to maintain this project lol!)
 ## Downloads
 
-This app is available for free on Google Play: [https://play.google.com/store/apps/details?id=me.timschneeberger.rootlessjamesdsp](https://play.google.com/store/apps/details?id=me.timschneeberger.rootlessjamesdsp&utm_source=github&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
+This app is available for free on Google Play: [https://play.google.com/store/apps/details?id=net.skeyboard.dsp](https://play.google.com/store/apps/details?id=net.skeyboard.dsp)
 
-Also available on F-Droid: https://f-droid.org/packages/me.timschneeberger.rootlessjamesdsp/
 
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
-    alt="Get it on F-Droid"
-    height="80">](https://f-droid.org/packages/me.timschneeberger.rootlessjamesdsp/)
-[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
-    alt="Get it on Google Play"
-    height="80">](https://play.google.com/store/apps/details?id=me.timschneeberger.rootlessjamesdsp&utm_source=github&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)
 
 ## Using Root
 
@@ -157,10 +135,11 @@ All the limitations mentioned above are **not relevant** for the magisk/root ver
 
 ### Translators
 
+
 <!-- CROWDIN-CONTRIBUTORS-START -->
 <table>
   <tr>
-    <td align="center" valign="top">
+  <td align="center" valign="top">
       <a href="https://crowdin.com/profile/ThePBone"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15683553/medium/d13428d1e0922bc2069500aef57d1459.png" />
         <br />
         <sub><b>Tim Schneeberger (ThePBone)</b></sub></a>
@@ -168,229 +147,167 @@ All the limitations mentioned above are **not relevant** for the magisk/root ver
       <sub><b>22396 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/netrunner-exe"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15209210/medium/dabb33b18a6eb0e59cee34e448d81e40.jpg" />
-        <br />
-        <sub><b>Oleksandr Tkachenko (netrunner-exe)</b></sub></a>
+      <a href="https://crowdin.com/profile/netrunner-exe"><sub><b>Oleksandr Tkachenko (netrunner-exe)</b></sub></a>
       <br />
       <sub><b>13732 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/hanifz99"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15997687/medium/77003f34134a90b1b9089af86bbef755.png" />
-        <br />
-        <sub><b>Hanifz99 (hanifz99)</b></sub></a>
+      <a href="https://crowdin.com/profile/hanifz99"><sub><b>Hanifz99 (hanifz99)</b></sub></a>
       <br />
       <sub><b>4192 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/rex07"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/13820943/medium/5b5499d4f13f168e0eab0499857a831e.jpeg" />
-        <br />
-        <sub><b>Rex_sa (rex07)</b></sub></a>
+      <a href="https://crowdin.com/profile/rex07"><sub><b>Rex_sa (rex07)</b></sub></a>
       <br />
       <sub><b>3543 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/FrameXX"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/14591682/medium/071f9d859dc36f9281f6f84b9c18c852.png" />
-        <br />
-        <sub><b>FrameXX</b></sub></a>
+      <a href="https://crowdin.com/profile/FrameXX"><sub><b>FrameXX</b></sub></a>
       <br />
       <sub><b>3518 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/eevan78"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/12664235/medium/ee2d64bed2ea9a0a1a5ee31e59fa9d7c.jpg" />
-        <br />
-        <sub><b>Ivan Pesic (eevan78)</b></sub></a>
+      <a href="https://crowdin.com/profile/eevan78"><sub><b>Ivan Pesic (eevan78)</b></sub></a>
       <br />
       <sub><b>3471 words</b></sub>
     </td>
   </tr>
   <tr>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/Add000"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15913337/medium/5bb6874d577c3c856b729fdcd2f9137a.jpg" />
-        <br />
-        <sub><b>Add000</b></sub></a>
+      <a href="https://crowdin.com/profile/Add000"><sub><b>Add000</b></sub></a>
       <br />
       <sub><b>3469 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/FlavioPonte"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15994613/medium/6ad9919ecb9cf61c034282b68e8bac17_default.png" />
-        <br />
-        <sub><b>FlavioPonte</b></sub></a>
+      <a href="https://crowdin.com/profile/FlavioPonte"><sub><b>FlavioPonte</b></sub></a>
       <br />
       <sub><b>3455 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/Gokwu"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15975377/medium/7be6218dc0f81f4f2dc8418ea983bd9e.png" />
-        <br />
-        <sub><b>Choi Jun Hyeong (Gokwu)</b></sub></a>
+      <a href="https://crowdin.com/profile/Gokwu"><sub><b>Choi Jun Hyeong (Gokwu)</b></sub></a>
       <br />
       <sub><b>3438 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/narpatosian"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15572339/medium/887ab0b501163ccf586003a7bca29ee1.jpg" />
-        <br />
-        <sub><b>narpatosian</b></sub></a>
+      <a href="https://crowdin.com/profile/narpatosian"><sub><b>narpatosian</b></sub></a>
       <br />
       <sub><b>3431 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/AeroShark333"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/16224190/medium/e0b34056ea348d30906f48054f716f3c_default.png" />
-        <br />
-        <sub><b>Abiram Kanagaratnam (AeroShark333)</b></sub></a>
+      <a href="https://crowdin.com/profile/AeroShark333"><sub><b>Abiram Kanagaratnam (AeroShark333)</b></sub></a>
       <br />
       <sub><b>3373 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/fankesyooni"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15676501/medium/6ee6d7e4c63bfb0f90dc5088a5ff0efd.jpg" />
-        <br />
-        <sub><b>fankesyooni</b></sub></a>
+      <a href="https://crowdin.com/profile/fankesyooni"><sub><b>fankesyooni</b></sub></a>
       <br />
       <sub><b>3316 words</b></sub>
     </td>
   </tr>
   <tr>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/vjburic1"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/16358724/medium/2c068e312e7171e555b24f08c4ac9ae2.jpeg" />
-        <br />
-        <sub><b>Vjekoslav Buric (vjburic1)</b></sub></a>
+      <a href="https://crowdin.com/profile/vjburic1"><sub><b>Vjekoslav Buric (vjburic1)</b></sub></a>
       <br />
       <sub><b>3237 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/beruanglaut"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15727477/medium/928d69a437d753d783f03c22bf2d2c10.png" />
-        <br />
-        <sub><b>Beruanglaut (beruanglaut)</b></sub></a>
+      <a href="https://crowdin.com/profile/beruanglaut"><sub><b>Beruanglaut (beruanglaut)</b></sub></a>
       <br />
       <sub><b>3168 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/fred199542"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15215886/medium/9a13bdf396f1b87097813de7767f36a4_default.png" />
-        <br />
-        <sub><b>Federico D. (fred199542)</b></sub></a>
+      <a href="https://crowdin.com/profile/fred199542"><sub><b>Federico D. (fred199542)</b></sub></a>
       <br />
       <sub><b>2903 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/ismaeloi1"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15576171/medium/6909c87c219971037460a9110677b64a.png" />
-        <br />
-        <sub><b>Ismaël GUERET (ismaeloi1)</b></sub></a>
+      <a href="https://crowdin.com/profile/ismaeloi1"><sub><b>Ismaël GUERET (ismaeloi1)</b></sub></a>
       <br />
       <sub><b>2844 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/MajorCanel"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15507252/medium/4a02e1c8d12aae3330baa229e5f8fb5e.jpeg" />
-        <br />
-        <sub><b>HasanDgn37 (MajorCanel)</b></sub></a>
+      <a href="https://crowdin.com/profile/MajorCanel"><sub><b>HasanDgn37 (MajorCanel)</b></sub></a>
       <br />
       <sub><b>2679 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/marcin.petrusiewicz"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/13535169/medium/29d3f1c6a1a270a85b8fda88e8d1c848.jpeg" />
-        <br />
-        <sub><b>Marcin Petrusiewicz (marcin.petrusiewicz)</b></sub></a>
+      <a href="https://crowdin.com/profile/marcin.petrusiewicz"><sub><b>Marcin Petrusiewicz (marcin.petrusiewicz)</b></sub></a>
       <br />
       <sub><b>2360 words</b></sub>
     </td>
   </tr>
   <tr>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/liziq"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15757161/medium/f3903c160404f095de68760f81609430.jpeg" />
-        <br />
-        <sub><b>zhiq liu (liziq)</b></sub></a>
+      <a href="https://crowdin.com/profile/liziq"><sub><b>zhiq liu (liziq)</b></sub></a>
       <br />
       <sub><b>1950 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/timli103117"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/16184616/medium/5bb20ab441ea015a44b727baf585c20d.png" />
-        <br />
-        <sub><b>Tim Li (timli103117)</b></sub></a>
+      <a href="https://crowdin.com/profile/timli103117"><sub><b>Tim Li (timli103117)</b></sub></a>
       <br />
       <sub><b>1886 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/TecitoDeMenta"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15859109/medium/09cc6632c3686add5d52d4e7a3dec25a.jpg" />
-        <br />
-        <sub><b>Alondra Márquez (TecitoDeMenta)</b></sub></a>
+      <a href="https://crowdin.com/profile/TecitoDeMenta"><sub><b>Alondra Márquez (TecitoDeMenta)</b></sub></a>
       <br />
       <sub><b>1847 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/phannhanh"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/14543576/medium/229892a475f27a927eb4ac8874c1a648.jpg" />
-        <br />
-        <sub><b>Phan Nhanh (phannhanh)</b></sub></a>
+      <a href="https://crowdin.com/profile/phannhanh"><sub><b>Phan Nhanh (phannhanh)</b></sub></a>
       <br />
       <sub><b>1842 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/MES-INARI"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15690555/medium/d0cc094c5ae8ad9419d7e229d4ed76c0.jpg" />
-        <br />
-        <sub><b>MES-mitutti (MES-INARI)</b></sub></a>
+      <a href="https://crowdin.com/profile/MES-INARI"><sub><b>MES-mitutti (MES-INARI)</b></sub></a>
       <br />
       <sub><b>1750 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/jontix"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15464490/medium/bd7f97dff61f637d007652f9947d8f17.jpeg" />
-        <br />
-        <sub><b>jontix</b></sub></a>
+      <a href="https://crowdin.com/profile/jontix"><sub><b>jontix</b></sub></a>
       <br />
       <sub><b>1731 words</b></sub>
     </td>
   </tr>
   <tr>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/LePom_"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/16923449/medium/6a5f5297df7dc5fd9d6c91f40a9becc0.png" />
-        <br />
-        <sub><b>Miko Nurmi (LePom_)</b></sub></a>
+      <a href="https://crowdin.com/profile/LePom_"><sub><b>Miko Nurmi (LePom_)</b></sub></a>
       <br />
       <sub><b>1464 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/SkyAfterRain_tw"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/16631123/medium/3665e526285f3ed15a2b2f7d68b13cbc.jpeg" />
-        <br />
-        <sub><b>SkyAfterRain_tw</b></sub></a>
+      <a href="https://crowdin.com/profile/SkyAfterRain_tw"><sub><b>SkyAfterRain_tw</b></sub></a>
       <br />
       <sub><b>1419 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/dang15082006"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/16282184/medium/bb9dbdbd49c8a5bf049bedc83a0d0cfc.jpeg" />
-        <br />
-        <sub><b>Đăng Nguyễn (dang15082006)</b></sub></a>
+      <a href="https://crowdin.com/profile/dang15082006"><sub><b>Đăng Nguyễn (dang15082006)</b></sub></a>
       <br />
       <sub><b>1307 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/AXEN.dev"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15755831/medium/4f31c78564ed55fef4b2bf8d96213a55.jpeg" />
-        <br />
-        <sub><b>Alessandro Belfiore (AXEN.dev)</b></sub></a>
+      <a href="https://crowdin.com/profile/AXEN.dev"><sub><b>Alessandro Belfiore (AXEN.dev)</b></sub></a>
       <br />
       <sub><b>1228 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/TheGary"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15713727/medium/4f9ede8b07ace57124001fb6678aeff7_default.png" />
-        <br />
-        <sub><b>Gary Bonilla (TheGary)</b></sub></a>
+      <a href="https://crowdin.com/profile/TheGary"><sub><b>Gary Bonilla (TheGary)</b></sub></a>
       <br />
       <sub><b>1030 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/kyunairi"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15925091/medium/7b1dd408c51242ab8602eb68408987cb_default.png" />
-        <br />
-        <sub><b>kyunairi</b></sub></a>
+      <a href="https://crowdin.com/profile/kyunairi"><sub><b>kyunairi</b></sub></a>
       <br />
       <sub><b>888 words</b></sub>
     </td>
   </tr>
   <tr>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/LuckyMehra776"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/16617215/medium/d2326af0f75dbef63ba72a5057bc32ec.jpeg" />
-        <br />
-        <sub><b>Lucky Mehra (LuckyMehra776)</b></sub></a>
+      <a href="https://crowdin.com/profile/LuckyMehra776"><sub><b>Lucky Mehra (LuckyMehra776)</b></sub></a>
       <br />
       <sub><b>819 words</b></sub>
     </td>
     <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/roccovantechno"><img alt="logo" style="width: 64px" src="https://crowdin-static.cf-downloads.crowdin.com/avatar/15818971/medium/75663306f941c87c2d9088c923aa89ad.jpeg" />
-        <br />
-        <sub><b>Gyuri Gergely (roccovantechno)</b></sub></a>
+      <a href="https://crowdin.com/profile/roccovantechno"><sub><b>Gyuri Gergely (roccovantechno)</b></sub></a>
       <br />
       <sub><b>714 words</b></sub>
     </td>
