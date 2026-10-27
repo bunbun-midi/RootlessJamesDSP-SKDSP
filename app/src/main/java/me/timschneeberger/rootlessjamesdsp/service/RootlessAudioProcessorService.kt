@@ -845,15 +845,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 var speedShiftWasActive = false
                 val shiftInBuffer = FloatArray(bufferSize)
-                // The last captured audio (whole blocks, ring buffer). When slow-down is switched
-                // on, it primes the stretcher so its output starts without a gap.
+                // The last captured audio (whole blocks, ring buffer), handed to the speed shifter
+                // when slow-down is switched on (it starts from the live position and needs the
+                // audio just before it)
                 val historyBlocks = (SPEED_SHIFT_PRIME_FRAMES + blockFrames - 1) / blockFrames
                 val historyRing = FloatArray(historyBlocks * bufferSize)
                 val historyLinear = FloatArray(historyBlocks * bufferSize)
                 var historyNext = 0   // block index written next
                 var historyCount = 0  // blocks filled so far
-                // Switching on: short splice (the stretcher output is aligned to the dry signal)
-                val spliceFrames = minOf(blockFrames, sampleRate / 100 /* 10 ms */)
                 val bpmBuffer = FloatArray(bufferSize)
                 val shiftOutBuffer = FloatArray(bufferSize)
                 // While idle, keep playing until the slowed-down backlog has been played (System.nanoTime)
@@ -887,8 +886,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 /**
                  * Replaces the captured block with the speed-shifted signal while slow-down is on.
-                 * Switching on splices to the (pre-filled, aligned) stretcher output over 10 ms;
-                 * switching off crossfades back to real time over one block (equal power).
+                 * Switching on needs no crossfade: the shifter continues seamlessly from the live
+                 * audio. Switching off crossfades back to real time over one block (equal power).
                  */
                 fun applySpeedShift() {
                     val active = SpeedShiftController.isActive
@@ -915,9 +914,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                             return
                         }
                         SpeedShifter.nativeSetSpeed(speedShifter, SpeedShiftController.speed)
-                        val historyFrames = linearizeHistory()
-                        if (historyFrames > 0)
-                            SpeedShifter.nativePrime(speedShifter, historyLinear, historyFrames, dry, blockFrames, spliceFrames)
+                        SpeedShifter.nativeStart(speedShifter, historyLinear, linearizeHistory())
                     }
                     recordHistory(dry)
                     if (speedShifter == 0L)
@@ -926,16 +923,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     SpeedShifter.nativeSetSpeed(speedShifter, SpeedShiftController.speed)
                     SpeedShifter.nativeProcess(speedShifter, dry, shiftOutBuffer, blockFrames)
 
-                    if (switchingOn) {
-                        // Equal-gain splice: the shifted audio is aligned to the dry signal
-                        for (frame in 0 until spliceFrames) {
-                            val g = 0.5f - 0.5f * cos((frame + 0.5f) / spliceFrames * PI.toFloat())
-                            for (ch in 0..1) {
-                                val i = frame * 2 + ch
-                                shiftOutBuffer[i] = shiftOutBuffer[i] * g + dry[i] * (1f - g)
-                            }
-                        }
-                    } else if (active != speedShiftWasActive) {
+                    if (!switchingOn && active != speedShiftWasActive) {
                         for (frame in 0 until blockFrames) {
                             val angle = (frame + 0.5f) / blockFrames * (PI.toFloat() / 2f)
                             val rising = sin(angle)

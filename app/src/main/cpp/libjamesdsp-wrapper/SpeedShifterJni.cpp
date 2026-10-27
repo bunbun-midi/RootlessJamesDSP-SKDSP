@@ -42,23 +42,19 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_SpeedShifter_nativeReset(JNIEnv
         shifter(handle)->requestReset();
 }
 
-extern "C" JNIEXPORT jint JNICALL
-Java_me_timschneeberger_rootlessjamesdsp_interop_SpeedShifter_nativePrime(JNIEnv* env, jclass, jlong handle,
-                                                                          jfloatArray history, jint historyFrames,
-                                                                          jfloatArray current, jint currentFrames,
-                                                                          jint spliceFrames)
+extern "C" JNIEXPORT void JNICALL
+Java_me_timschneeberger_rootlessjamesdsp_interop_SpeedShifter_nativeStart(JNIEnv* env, jclass, jlong handle,
+                                                                          jfloatArray history, jint historyFrames)
 {
-    if (handle == 0 || history == nullptr || current == nullptr || historyFrames <= 0 || currentFrames <= 0)
-        return 0;
-    if (env->GetArrayLength(history) < historyFrames * 2 || env->GetArrayLength(current) < currentFrames * 2)
-        return 0;
-
+    if (handle == 0)
+        return;
+    if (history == nullptr || historyFrames <= 0 || env->GetArrayLength(history) < historyFrames * 2) {
+        shifter(handle)->start(nullptr, 0);
+        return;
+    }
     jfloat* h = env->GetFloatArrayElements(history, nullptr);
-    jfloat* c = env->GetFloatArrayElements(current, nullptr);
-    const int extra = shifter(handle)->prime(h, historyFrames, c, currentFrames, spliceFrames);
+    shifter(handle)->start(h, historyFrames);
     env->ReleaseFloatArrayElements(history, h, JNI_ABORT);
-    env->ReleaseFloatArrayElements(current, c, JNI_ABORT);
-    return extra;
 }
 
 extern "C" JNIEXPORT jlong JNICALL

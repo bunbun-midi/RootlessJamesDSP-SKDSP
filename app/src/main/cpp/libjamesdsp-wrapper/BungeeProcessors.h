@@ -81,15 +81,17 @@ public:
     void requestReset() { resetRequested.store(true); }
     int64_t backlogFrames() const { return backlog.load(); }
 
-    /* Audio thread, before the first process(): `history` is the audio captured just before
-     * switching on and `current` the block about to be processed (interleaved stereo). Fills the
-     * stretcher so its output starts without a gap and aligns it for a dry -> shifted splice of
-     * `spliceFrames` frames at the start of `current`. Returns the alignment delay in frames. */
-    int prime(const float* history, int historyFrames, const float* current, int currentFrames, int spliceFrames);
-
-    /* Audio needed in `history` for prime(): stretcher delay (~3.6 k frames) + alignment range */
-    static constexpr int kPrimeFrames = 8192;
-    static constexpr int kMaxAlignFrames = 960; /* 20 ms at 48 kHz */
+    /*
+     * Audio thread, when slow-down is switched on (before the first process()): `history` is the
+     * audio captured just before (interleaved stereo, oldest first; may be empty).
+     *
+     * Slow-down then starts seamlessly from the audio that was playing: a WSOLA time stretcher
+     * (short overlapping segments, causal, no look-ahead) continues the waveform and gradually
+     * falls behind the input. Once it lags by kBungeeDelay (the delay of the Bungee stretcher),
+     * Bungee is started at exactly the input position WSOLA is playing and takes over with a short
+     * crossfade (after ~0.3 s at 0.75x; at 1.0x WSOLA simply keeps playing in real time).
+     */
+    void start(const float* history, int historyFrames);
 
     /* Audio thread: consumes `frames` captured frames and renders `frames` output frames */
     void process(const float* inInterleaved, float* outInterleaved, int frames);
@@ -98,19 +100,59 @@ public:
     static constexpr float kMaxSpeed = 1.0f;
     static constexpr int kMaxBacklogSeconds = 300; /* 5 min; about 58 MB at 48 kHz */
 
+    /* History start() can use (Bungee's priming at the hand-over may reach back this far) */
+    static constexpr int kPrimeFrames = 8192;
+    /* Output delay of the Bungee stream (look-ahead 2050 + output buffering), in frames */
+    static constexpr int kBungeeDelay = 3586;
+
 private:
+    enum class Phase { Idle, Wsola, Bungee };
+
     void reset();
     void feedDiscarding(const float* in, int frames);
+    void ringWrite(const float* in, int frames);
+    const float* at(int64_t t) const;
+    void ringCopy(int64_t from, int frames, float* out) const;
+    float* scratch(int frames);
+    int64_t chooseSegment(int64_t outPos, double nominal) const;
+    void processWsola(float* out, int frames, int64_t t0);
+    void processBungee(float* out, int frames);
+    void handOver(int64_t t0);
+
+    /* WSOLA: Hann windows of 2 hops (21 ms at 48 kHz), 50 % overlap */
+    static constexpr int kHop = 512;
+    static constexpr int kSearchFrames = 320;  /* +-6.7 ms around the nominal position */
+    static constexpr int kMatchFrames = 384;   /* compared with the audio just played */
+    static constexpr int kMatchStep = 3;       /* every 3rd frame is compared (cost) */
+    static constexpr int kSpliceFrames = 480;  /* WSOLA -> Bungee crossfade */
+    static constexpr int kRingFrames = 1 << 16; /* captured audio kept (power of 2) */
 
     const int sampleRate;
     std::atomic<float> targetSpeed{1.0f};
     std::atomic<bool> resetRequested{false}; /* the constructor already builds a fresh stream */
     std::atomic<int64_t> backlog{0};
 
+    Phase phase = Phase::Idle;
+
+    /* Captured audio; frame index t = number of frames captured before it */
+    std::vector<float> ring;
+    int64_t written = 0;
+
+    /* WSOLA state: segment A fades out, segment B fades in; *Out = output time of the segment's
+     * window start, *In = input position it reads from */
+    int64_t segAOut = 0, segAIn = 0, segBOut = 0, segBIn = 0;
+    double nominalIn = 0.0;
+    bool needSegB = true;
+    std::vector<float> window;
+    std::vector<float> outRing; /* last kMatchFrames output frames */
+    int outRingPos = 0;         /* oldest frame in outRing */
+
+    /* Bungee */
     ChunkedFifo fifo;
     std::unique_ptr<SpeedStream> stream;
     double fraction = 0.0;
     std::vector<float> inL, inR, outL, outR;
+    std::vector<float> scratchBuf, spliceBuf;
 };
 
 } // namespace chain

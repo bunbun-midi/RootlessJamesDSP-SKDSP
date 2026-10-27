@@ -12,6 +12,7 @@ namespace chain {
 
 /* Largest block passed to Bungee::Stream::process at once; larger blocks are split */
 static constexpr int kMaxBlockFrames = 16384;
+static constexpr float kPi = 3.14159265358979f;
 
 struct BungeeStream {
     Bungee::Stretcher<Bungee::Basic> stretcher; /* must be constructed before `stream` */
@@ -24,7 +25,7 @@ struct BungeeStream {
 
 /* Speed shifter stream (pitch 1): grains only need +-2048 input frames around their position
  * (measured with Bungee::Basic at hop adjust 0), so it runs with that look-ahead instead of the
- * pitch-shift worst case. Output delay ~2.6 k frames (~55 ms at 48 kHz) instead of ~9.7 k. */
+ * pitch-shift worst case. Output delay 3586 frames (75 ms at 48 kHz) instead of 9728. */
 static constexpr int kSpeedLookahead = 2050;
 
 struct SpeedStream {
@@ -179,6 +180,13 @@ SpeedShifter::SpeedShifter(int sampleRate) :
     inR.assign(kMaxBlockFrames, 0.0f);
     outL.assign(kMaxBlockFrames, 0.0f);
     outR.assign(kMaxBlockFrames, 0.0f);
+    ring.assign((size_t)kRingFrames * 2, 0.0f);
+    outRing.assign((size_t)kMatchFrames * 2, 0.0f);
+    scratchBuf.assign((size_t)kMaxBlockFrames * 2, 0.0f);
+    spliceBuf.assign((size_t)kSpliceFrames * 2, 0.0f);
+    window.resize(2 * kHop);
+    for (int i = 0; i < 2 * kHop; i++)
+        window[i] = 0.5f - 0.5f * std::cos(kPi * (float)i / (float)kHop); /* periodic Hann, N = 2 hops */
 }
 
 SpeedShifter::~SpeedShifter() = default;
@@ -188,6 +196,8 @@ void SpeedShifter::reset() {
     fraction = 0.0;
     stream = std::make_unique<SpeedStream>(sampleRate);
     backlog.store(0);
+    phase = Phase::Idle;
+    written = 0;
 }
 
 void SpeedShifter::feedDiscarding(const float* in, int frames) {
@@ -204,66 +214,143 @@ void SpeedShifter::feedDiscarding(const float* in, int frames) {
     }
 }
 
-int SpeedShifter::prime(const float* history, int historyFrames, const float* current, int currentFrames,
-                        int spliceFrames) {
-    if (resetRequested.exchange(false))
-        reset();
+// ---- captured audio (ring) ------------------------------------------------------------------------
 
-    /*
-     * Run the audio captured before switching on through the stretcher at speed 1 (output
-     * discarded), so the first real block comes out as audio instead of silence. The shifted
-     * audio then lags the captured audio by the stretcher delay D, i.e. switching on replays the
-     * last D frames. Crossfading from the dry signal to a copy that is D frames older partly
-     * cancels on tonal music, so up to kMaxAlignFrames of extra delay are added (kept in the
-     * backlog), chosen so that both copies match best over the splice (as in WSOLA).
-     */
-    const int maxAlign = std::min(kMaxAlignFrames, historyFrames);
-    feedDiscarding(history, historyFrames - maxAlign);
-    const int delay = (int)std::lround(stream->stream.latency());
-
-    // Audio at frame i relative to the start of `current` (negative = history), interleaved stereo.
-    // Both channels are compared separately (a mono mix cancels out-of-phase content).
-    auto frame = [&](int i) {
-        return i < 0 ? history + 2 * (historyFrames + i) : current + 2 * i;
-    };
-    const int n = std::clamp(spliceFrames, 1, currentFrames);
-    int extra = 0;
-    if (delay + maxAlign + 1 <= historyFrames) {
-        double ee = 0.0;
-        for (int i = 0; i < n; i++) {
-            const float* d = frame(i);
-            ee += (double)d[0] * d[0] + (double)d[1] * d[1];
-        }
-        double best = -2.0;
-        for (int e = 0; e <= maxAlign; e++) {
-            double c = 0.0, ww = 0.0;
-            for (int i = 0; i < n; i++) {
-                const float* d = frame(i);
-                const float* w = frame(i - delay - e);
-                c += (double)d[0] * w[0] + (double)d[1] * w[1];
-                ww += (double)w[0] * w[0] + (double)w[1] * w[1];
-            }
-            const double r = ee > 1e-12 && ww > 1e-12 ? c / std::sqrt(ee * ww) : 0.0;
-            if (r > best + 1e-9) {
-                best = r;
-                extra = e;
-            }
-        }
+void SpeedShifter::ringWrite(const float* in, int frames) {
+    for (int i = 0; i < frames; i++) {
+        const size_t r = (size_t)((written + i) & (kRingFrames - 1)) * 2;
+        ring[r] = in[2 * i];
+        ring[r + 1] = in[2 * i + 1];
     }
-
-    feedDiscarding(history + 2 * (historyFrames - maxAlign), maxAlign - extra);
-    fifo.push(history + 2 * (historyFrames - extra), extra);
-    backlog.store(fifo.size());
-    return extra;
+    written += frames;
 }
 
-void SpeedShifter::process(const float* in, float* out, int frames) {
-    if (resetRequested.exchange(false))
-        reset();
+/* Captured frame at absolute index t (0 = first frame given to start()/process()); zeros outside */
+inline const float* SpeedShifter::at(int64_t t) const {
+    static const float zero[2] = {0.0f, 0.0f};
+    if (t < 0 || t >= written || t < written - kRingFrames)
+        return zero;
+    return &ring[(size_t)(t & (kRingFrames - 1)) * 2];
+}
 
+void SpeedShifter::ringCopy(int64_t from, int frames, float* out) const {
+    for (int i = 0; i < frames; i++) {
+        const float* f = at(from + i);
+        out[2 * i] = f[0];
+        out[2 * i + 1] = f[1];
+    }
+}
+
+// ---- start ----------------------------------------------------------------------------------------
+
+void SpeedShifter::start(const float* history, int historyFrames) {
+    if (resetRequested.exchange(false) || phase != Phase::Idle)
+        reset();
+    if (history != nullptr && historyFrames > 0) {
+        const int n = std::min(historyFrames, kRingFrames / 2);
+        ringWrite(history + 2 * (historyFrames - n), n);
+    }
+
+    /*
+     * Seamless start: the audio played so far is treated as a WSOLA segment with input position ==
+     * output position (segment A, the one that is fading out). Output continues from it without a
+     * jump, while each new segment advances through the input at `speed`, so the output falls
+     * behind the input gradually. See processWsola().
+     */
+    const int64_t t = written; /* output (= capture) time of the next frame */
+    segAOut = t - kHop;
+    segAIn = t - kHop;
+    nominalIn = (double)(t - kHop);
+    segBOut = t;
+    segBIn = t; /* first new segment is chosen at the first output frame */
+    needSegB = true;
+    phase = Phase::Wsola;
+    std::fill(outRing.begin(), outRing.end(), 0.0f);
+    for (int i = 0; i < kMatchFrames; i++) {
+        /* what was played just before: the dry signal */
+        const float* f = at(t - kMatchFrames + i);
+        outRing[2 * i] = f[0];
+        outRing[2 * i + 1] = f[1];
+    }
+    outRingPos = 0;
+    backlog.store(0);
+}
+
+// ---- WSOLA (start phase) --------------------------------------------------------------------------
+
+int64_t SpeedShifter::chooseSegment(int64_t outPos, double nominal) const {
+    /*
+     * Candidates around the nominal input position, never after the output position (the input for
+     * an output frame must already be captured). The candidate whose preceding kMatchFrames best
+     * match the audio just played (normalized cross-correlation, both channels) is used, so the
+     * new segment continues the waveform smoothly.
+     */
+    const int64_t nom = (int64_t)std::floor(nominal);
+    const int64_t hi = std::min(nom + kSearchFrames, outPos);
+    const int64_t lo = std::max<int64_t>(nom - kSearchFrames, std::max<int64_t>(written - kRingFrames + kMatchFrames, 0));
+    if (hi <= lo)
+        return std::clamp<int64_t>(nom, 0, outPos);
+
+    double pp = 0.0; /* energy of the played audio */
+    for (int i = 0; i < kMatchFrames; i += kMatchStep) {
+        const float* y = &outRing[(size_t)((outRingPos + i) % kMatchFrames) * 2];
+        pp += (double)y[0] * y[0] + (double)y[1] * y[1];
+    }
+    int64_t best = std::clamp<int64_t>(nom, lo, hi);
+    double bestScore = -2.0;
+    for (int64_t a = hi; a >= lo; a--) { /* ties: prefer the later candidate (smaller lag) */
+        double c = 0.0, xx = 0.0;
+        for (int i = 0; i < kMatchFrames; i += kMatchStep) {
+            const float* y = &outRing[(size_t)((outRingPos + i) % kMatchFrames) * 2];
+            const float* x = at(a - kMatchFrames + i);
+            c += (double)x[0] * y[0] + (double)x[1] * y[1];
+            xx += (double)x[0] * x[0] + (double)x[1] * x[1];
+        }
+        const double score = pp > 1e-12 && xx > 1e-12 ? c / std::sqrt(pp * xx) : 0.0;
+        if (score > bestScore + 1e-9) {
+            bestScore = score;
+            best = a;
+        }
+    }
+    return best;
+}
+
+void SpeedShifter::processWsola(float* out, int frames, int64_t t0) {
+    const double speed = std::clamp(targetSpeed.load(), kMinSpeed, kMaxSpeed);
+    for (int i = 0; i < frames; i++) {
+        const int64_t t = t0 + i;
+        if (needSegB || t >= segBOut + kHop) {
+            if (!needSegB) {
+                /* segment B becomes the fading-out segment A */
+                segAOut = segBOut;
+                segAIn = segBIn;
+                segBOut += kHop;
+            }
+            needSegB = false;
+            nominalIn += speed * kHop;
+            segBIn = chooseSegment(segBOut, nominalIn);
+        }
+        const int jA = (int)(t - segAOut); /* kHop .. 2 kHop - 1: second half of A's window */
+        const int jB = (int)(t - segBOut); /* 0 .. kHop - 1: first half of B's window */
+        const float* xa = at(segAIn + jA);
+        const float* xb = at(segBIn + jB);
+        const float wa = window[jA], wb = window[jB];
+        const float l = xa[0] * wa + xb[0] * wb;
+        const float r = xa[1] * wa + xb[1] * wb;
+        out[2 * i] = l;
+        out[2 * i + 1] = r;
+        float* y = &outRing[(size_t)outRingPos * 2];
+        y[0] = l;
+        y[1] = r;
+        outRingPos = (outRingPos + 1) % kMatchFrames;
+    }
+}
+
+// ---- Bungee (after the start phase) ---------------------------------------------------------------
+
+void SpeedShifter::processBungee(float* out, int frames) {
     for (int off = 0; off < frames;) {
         const int n = std::min(frames - off, kMaxBlockFrames);
-        fifo.push(in + off * 2, n);
 
         // Consume speed x n frames of backlog (fractional remainder carried over) for n output frames
         const double speed = std::clamp(targetSpeed.load(), kMinSpeed, kMaxSpeed);
@@ -285,12 +372,86 @@ void SpeedShifter::process(const float* in, float* out, int frames) {
         std::fill(o + got * 2, o + n * 2, 0.0f);
         off += n;
     }
+}
+
+void SpeedShifter::handOver(int64_t t0) {
+    /*
+     * The WSOLA output has fallen kBungeeDelay frames behind: start Bungee so that its first output
+     * frame is the input position WSOLA is playing at t0. Bungee outputs input position e - delay
+     * after being fed up to e, so it is primed with the captured audio up to e = position + delay
+     * (at speed 1, output discarded); the audio captured after e goes into the backlog.
+     */
+    const int64_t pos = segBIn + (t0 - segBOut);
+    const int64_t e = std::min(pos + kBungeeDelay, written);
+    const int64_t from = std::max<int64_t>(e - kPrimeFrames, std::max<int64_t>(written - kRingFrames, 0));
+    /* `stream` is still unused here (fresh from the constructor or reset()) */
+    for (int64_t p = from; p < e;) {
+        const int n = (int)std::min<int64_t>(e - p, kMaxBlockFrames);
+        ringCopy(p, n, scratch(n));
+        feedDiscarding(scratchBuf.data(), n);
+        p += n;
+    }
+    fifo.clear();
+    for (int64_t p = e; p < written;) {
+        const int n = (int)std::min<int64_t>(written - p, kMaxBlockFrames);
+        ringCopy(p, n, scratch(n));
+        fifo.push(scratchBuf.data(), n);
+        p += n;
+    }
+    fraction = 0.0;
+    phase = Phase::Bungee;
+}
+
+float* SpeedShifter::scratch(int frames) {
+    if (scratchBuf.size() < (size_t)frames * 2)
+        scratchBuf.resize((size_t)frames * 2);
+    return scratchBuf.data();
+}
+
+void SpeedShifter::process(const float* in, float* out, int frames) {
+    if (resetRequested.exchange(false))
+        reset();
+    if (phase == Phase::Idle)
+        start(nullptr, 0);
+
+    const int64_t t0 = written;
+    ringWrite(in, frames);
+
+    if (phase == Phase::Wsola) {
+        // Switch to Bungee once WSOLA lags far enough behind (only at speed < 1)
+        const int64_t lag = segBOut - segBIn;
+        if (!needSegB && lag >= kBungeeDelay) {
+            // Crossfade from WSOLA to Bungee over the start of this block (same input position)
+            const int splice = std::min(frames, kSpliceFrames);
+            float* wsola = spliceBuf.data();
+            processWsola(wsola, splice, t0);
+            handOver(t0);
+            processBungee(out, frames);
+            for (int i = 0; i < splice; i++) {
+                const float g = 0.5f - 0.5f * std::cos(kPi * ((float)i + 0.5f) / (float)splice);
+                out[2 * i] = out[2 * i] * g + wsola[2 * i] * (1.0f - g);
+                out[2 * i + 1] = out[2 * i + 1] * g + wsola[2 * i + 1] * (1.0f - g);
+            }
+        } else {
+            processWsola(out, frames, t0);
+            backlog.store(std::max<int64_t>(0, segBOut - segBIn));
+            return;
+        }
+    } else {
+        // Bungee: the captured block joins the backlog
+        for (int off = 0; off < frames;) {
+            const int n = std::min(frames - off, kMaxBlockFrames);
+            fifo.push(in + off * 2, n);
+            off += n;
+        }
+        processBungee(out, frames);
+    }
 
     // Bound memory: skip the oldest audio if the backlog exceeds the limit
     const int64_t maxFrames = (int64_t)kMaxBacklogSeconds * sampleRate;
     if (fifo.size() > maxFrames)
         fifo.drop(fifo.size() - maxFrames);
-    backlog.store(fifo.size());
+    backlog.store(fifo.size() + kBungeeDelay);
 }
 
 } // namespace chain

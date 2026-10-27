@@ -16,7 +16,7 @@
  * the look-ahead (how far grains are placed behind the newest input) is a constructor
  * parameter instead of stretcher.maxInputFrameCount() / 2. maxInputFrameCount covers the
  * widest pitch shift; at pitch 1 a grain only spans +-2048 frames, so a look-ahead of about
- * 2 k frames gives the same output with ~55 ms instead of ~200 ms delay.
+ * 2 k frames gives the same output with ~75 ms instead of ~200 ms delay.
  * The look-ahead must cover half the grain's input span for every request that is made.
  */
 
