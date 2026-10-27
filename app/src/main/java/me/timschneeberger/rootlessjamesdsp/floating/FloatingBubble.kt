@@ -24,6 +24,7 @@ import androidx.core.content.getSystemService
 import androidx.core.view.isVisible
 import com.google.android.material.color.MaterialColors
 import me.timschneeberger.rootlessjamesdsp.R
+import me.timschneeberger.rootlessjamesdsp.bpm.BpmController
 import me.timschneeberger.rootlessjamesdsp.databinding.ViewFloatingBubbleBinding
 import me.timschneeberger.rootlessjamesdsp.delegates.ThemingDelegate
 import me.timschneeberger.rootlessjamesdsp.model.preference.AppTheme
@@ -41,7 +42,9 @@ import kotlin.math.abs
  *  - long-press and drag: move the button; it docks to the left or right edge and the position
  *    is saved in [positionPrefs] under "<positionKey>_x/_y/_right"
  *
- * Subclasses draw their state in [render] using [setAppearance] and [setLabel].
+ * Subclasses draw their state in [render] using [setAppearance] and [setLabel]. With
+ * "LCD-style floating buttons" (BPM display settings) the theme colors are replaced by the BPM
+ * display's palette ([LcdStyle]); the size stays the same.
  */
 abstract class FloatingBubble(
     protected val context: Context,
@@ -94,6 +97,21 @@ abstract class FloatingBubble(
     protected open fun onSwipe(steps: Int): Boolean = false
     protected open fun onSwipeEnd() {}
 
+    // LCD style (BPM display palette), followed live
+    private var lcd = false
+    private val lcdPrefs = BpmController.prefs(context)
+    private val lcdKey = context.getString(R.string.key_bpm_lcd_buttons)
+    private val lcdListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == lcdKey) {
+            lcd = LcdStyle.buttonsEnabled(context)
+            styleLabel()
+            if (isShown)
+                render()
+        }
+    }
+    private val lcdOff by lazy { lcdButtonBackground(active = false) }
+    private val lcdOn by lazy { lcdButtonBackground(active = true) }
+
     private val longPressRunnable = Runnable {
         if (mode == Mode.NONE) {
             mode = Mode.DRAG
@@ -116,11 +134,8 @@ abstract class FloatingBubble(
             .fold(context) { ctx, resId -> ContextThemeWrapper(ctx, resId) }
 
         binding = ViewFloatingBubbleBinding.inflate(LayoutInflater.from(themedContext))
-        binding.bubbleLabel.background = GradientDrawable().apply {
-            cornerRadius = 100 * density
-            setColor(color(com.google.android.material.R.attr.colorSurfaceInverse))
-        }
-        binding.bubbleLabel.setTextColor(color(com.google.android.material.R.attr.colorOnSurfaceInverse))
+        lcd = LcdStyle.buttonsEnabled(context)
+        styleLabel()
 
         setupGestures()
     }
@@ -144,6 +159,9 @@ abstract class FloatingBubble(
             Timber.e(ex)
             return
         }
+        lcdPrefs.registerOnSharedPreferenceChangeListener(lcdListener)
+        lcd = LcdStyle.buttonsEnabled(context)
+        styleLabel()
         render()
     }
 
@@ -152,6 +170,7 @@ abstract class FloatingBubble(
         if (!isShown)
             return
         isShown = false
+        lcdPrefs.unregisterOnSharedPreferenceChangeListener(lcdListener)
         try {
             windowManager.removeViewImmediate(binding.root)
         } catch (ex: Exception) {
@@ -163,22 +182,68 @@ abstract class FloatingBubble(
 
     protected fun color(@AttrRes attr: Int) = MaterialColors.getColor(binding.root, attr)
 
+    /**
+     * [active]: the button's function is on (slowed down, recording, processing); in LCD style
+     * this lights the segments up instead of using [backgroundAttr]/[foregroundAttr].
+     */
     protected fun setAppearance(
         @DrawableRes icon: Int,
         value: String,
         @AttrRes backgroundAttr: Int,
         @AttrRes foregroundAttr: Int,
+        active: Boolean,
         alpha: Float = 1f,
         contentDescription: String,
     ) {
-        val foreground = color(foregroundAttr)
-        binding.bubbleButton.setCardBackgroundColor(color(backgroundAttr))
+        val foreground: Int
+        if (lcd) {
+            foreground = if (active) LcdStyle.TEXT else LcdStyle.DIM
+            binding.bubbleButton.setCardBackgroundColor(LcdStyle.BACKGROUND_BOTTOM)
+            binding.bubbleContent.background = if (active) lcdOn else lcdOff
+            if (active)
+                binding.bubbleValue.setShadowLayer(4 * density, 0f, 0f, LcdStyle.GLOW)
+            else
+                binding.bubbleValue.setShadowLayer(0f, 0f, 0f, 0)
+        } else {
+            foreground = color(foregroundAttr)
+            binding.bubbleButton.setCardBackgroundColor(color(backgroundAttr))
+            binding.bubbleContent.background = null
+            binding.bubbleValue.setShadowLayer(0f, 0f, 0f, 0)
+        }
         binding.bubbleIcon.setImageResource(icon)
         binding.bubbleIcon.imageTintList = ColorStateList.valueOf(foreground)
         binding.bubbleValue.setTextColor(foreground)
         binding.bubbleValue.text = value
         binding.bubbleButton.alpha = alpha
         binding.bubbleButton.contentDescription = contentDescription
+    }
+
+    private fun lcdButtonBackground(active: Boolean) = GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(LcdStyle.BACKGROUND_TOP, LcdStyle.BACKGROUND_BOTTOM)
+    ).apply {
+        shape = GradientDrawable.OVAL
+        setStroke((2 * density).toInt(), if (active) LcdStyle.BEZEL_ACTIVE else LcdStyle.BEZEL)
+    }
+
+    private fun styleLabel() {
+        binding.bubbleLabel.background = if (lcd) {
+            GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(LcdStyle.BACKGROUND_TOP, LcdStyle.BACKGROUND_BOTTOM)
+            ).apply {
+                cornerRadius = 100 * density
+                setStroke((1.5f * density).toInt().coerceAtLeast(1), LcdStyle.BEZEL)
+            }
+        } else {
+            GradientDrawable().apply {
+                cornerRadius = 100 * density
+                setColor(color(com.google.android.material.R.attr.colorSurfaceInverse))
+            }
+        }
+        binding.bubbleLabel.setTextColor(
+            if (lcd) LcdStyle.TEXT else color(com.google.android.material.R.attr.colorOnSurfaceInverse)
+        )
     }
 
     /** Text pill next to the button (towards the screen center); null hides it. Hidden while dragging. */

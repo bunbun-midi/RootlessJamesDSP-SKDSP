@@ -36,13 +36,20 @@ public:
     void configure(float sampleRate);
     void setParams(bool enable, float semitones);
     bool isEnabled() const { return enabled; }
+    /* Incremented whenever the stretcher is rebuilt (its output then starts from silence again) */
+    unsigned generation() const { return builds; }
 
-    /* In-place stereo processing; any block size. Passthrough if not configured. */
+    /* In-place stereo processing; any block size. Passthrough if not configured. Keeps working
+     * for a moment after being disabled, so the chain can fade it out. */
     void process(float* left, float* right, size_t n);
+
+    /* Output delay of the stretcher (Bungee::Stream look-ahead), in frames */
+    static constexpr int kLatency = 9728;
 
 private:
     void rebuild();
 
+    unsigned builds = 0;
     bool enabled = false;
     double pitch = 1.0;
     float sampleRate = 0.0f;

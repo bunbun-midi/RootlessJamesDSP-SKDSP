@@ -25,6 +25,7 @@ class PowerBubble(context: Context) : FloatingBubble(
                 else com.google.android.material.R.attr.colorSecondaryContainer,
             foregroundAttr = if (on) com.google.android.material.R.attr.colorOnPrimary
                 else com.google.android.material.R.attr.colorOnSecondaryContainer,
+            active = on,
             alpha = if (on) 1f else 0.85f,
             contentDescription = context.getString(
                 if (on) R.string.power_bubble_on_desc else R.string.power_bubble_off_desc

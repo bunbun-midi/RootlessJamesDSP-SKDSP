@@ -749,20 +749,20 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
 
     <!-- Speed shift -->
     <string name="speed_shift_title">Speed shift</string>
-    <string name="speed_shift_bubble_summary">Shows a floating button while audio processing is on. Tap the button to slow playing audio down (pitch is kept), swipe up or down on it to change the speed, long-press and drag to move it</string>
+    <string name="speed_shift_bubble_summary">Shows a floating button while audio processing is on. Tap the button to slow playing audio down (pitch is kept), swipe up or down on it to change the speed, long-press and drag to move it.</string>
     <string name="speed_shift_speed">Speed</string>
     <string name="speed_shift_speed_unit">\u00d7</string>
     <string name="speed_shift_step">Swipe step</string>
     <string name="speed_shift_permission_required">Allow \"Display over other apps\" to show the floating speed button</string>
     <string name="speed_shift_bubble_off_desc">Speed shift off. Tap to slow down to %1$s</string>
     <string name="speed_shift_bubble_on_desc">Speed shift on at %1$s. Tap to turn off, swipe up or down to change speed</string>
-    <string name="speed_shift_behind">%1$s behind</string>
+    <string name="speed_shift_behind">%1$s</string>
 
     <!-- Recorder -->
     <string name="recorder_title">Recorder A</string>
-    <string name="recorder_summary">Shows a floating record button while audio processing is on. Records to Music/SK DSP (file names end in A). As the last block in the effect order it records exactly what you hear; placed earlier, it records the audio at that point with the output gain and limiter applied.</string>
+    <string name="recorder_summary">Shows a floating record button while audio processing is on. Records to Music/SK DSP (file names end in A). As the last block in the effect order it records exactly what you hear; placed earlier, it records the audio at that point with the output gain and limiter applied, delayed to line up with the output.</string>
     <string name="recorder_b_title">Recorder B</string>
-    <string name="recorder_b_summary">A second recorder for another point in the effect order (by default first, i.e. the dry signal). Shares the floating record button with Recorder A: both start and stop on the same audio block. File names end in B.</string>
+    <string name="recorder_b_summary">A second recorder for another point in the effect order (by default first, i.e. the dry signal). Shares the floating record button with Recorder A: both start and stop on the same audio block, and the delay of the effects in between is compensated, so the two files line up sample for sample. File names end in B.</string>
     <string name="recorder_format">Format</string>
     <string name="recorder_format_pcm16">WAV, 16-bit</string>
     <string name="recorder_format_float">WAV, 32-bit float (no clipping)</string>
@@ -790,6 +790,9 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="bpm_display_label">BPM</string>
     <string name="bpm_display_listening">BPM \u00b7 listening</string>
     <string name="bpm_range">Tempo range</string>
+    <string name="bpm_size">Display size</string>
+    <string name="bpm_lcd_buttons">LCD-style floating buttons</string>
+    <string name="bpm_lcd_buttons_summary">The speed shift, record and power buttons use the colors of the BPM display (sizes stay the same)</string>
     <string name="bpm_range_auto">Automatic</string>
     <string name="bpm_range_70">70\u2013140 BPM</string>
     <string name="bpm_range_80">80\u2013160 BPM</string>

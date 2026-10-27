@@ -22,6 +22,7 @@ const int kDefaultOrder[COUNT] = {
 
 /* 20 / log2(10): converts log2(x) to dB */
 static constexpr float kDbPerLog2 = 6.0205999f;
+static constexpr float kHalfPi = 1.57079632679f;
 
 /* State of the processing call currently running on this thread. The library calls
  * processInternal without any user pointer, so we pass our state through TLS. */
@@ -74,6 +75,66 @@ void State::setOrder(const int* ids, int count) {
         order[pos] = id;
         used[id] = true;
         out++;
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Latency, recorder alignment
+// ------------------------------------------------------------------------------------------------
+
+int State::latencyOf(int id, const JamesDSPLib* d) const {
+    switch (id) {
+        case TUBE: /* 2x oversampling filters (used at 30..65 kHz, i.e. at 44.1/48 kHz) */
+            return d->tubeEnabled && d->tube.needOversample ? 10 : 0;
+        case COMPANDER: /* FFT frame delay, by time-frequency transform */
+            if (!d->compEnabled) return 0;
+            switch (d->comp.tfresolution) {
+                case 0: return 1792; /* STFT */
+                case 1: return 3584; /* continuous wavelet */
+                case 2: return 2048; /* undersampling */
+                default: return 0;   /* time domain */
+            }
+        case BASS_BOOST: { /* look-ahead delay line of the dynamic bass boost */
+            if (!d->bassBoostEnabled) return 0;
+            const integerDelayLine& dl = d->dbb.dL[0];
+            return dl.allocateLen > 0 ? ((dl.inPoint - dl.outPoint) % dl.allocateLen + dl.allocateLen) % dl.allocateLen : 0;
+        }
+        case CROSSFEED: /* HRTF "realistic surround": direct-sound delay of the impulse responses */
+            return d->crossfeedEnabled && d->advXF.mode == 5 ? (d->fs < 46050.0f ? 19 : 20) : 0;
+        case STEREO_WIDE:
+            return d->sterEnhEnabled ? 3 : 0;
+        case PITCH_SHIFT:
+            return fadePitch.running && fadePitch.warm == 0 ? PitchShifter::kLatency : 0;
+        case PITCH_SHIFT_HQ:
+            return fadePitchHq.running && fadePitchHq.warm == 0 ? BungeePitchShifter::kLatency : 0;
+        default:
+            /* Equalizers, convolver, DDC, reverb (dry path), compressor: no delay.
+             * Liveprog depends on the script and is assumed to have none. */
+            return 0;
+    }
+}
+
+void AlignDelay::push(const float* left, const float* right, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        const size_t r = (size_t)((written + i) & (kCapacity - 1)) * 2;
+        ring[r] = left[i];
+        ring[r + 1] = right[i];
+    }
+    written += n;
+}
+
+void AlignDelay::read(int delay, float* left, float* right, size_t n) const {
+    delay = std::clamp(delay, 0, kCapacity - (int)std::min<size_t>(n, kCapacity) - 1);
+    const int64_t start = (int64_t)written - (int64_t)n - delay;
+    for (size_t i = 0; i < n; i++) {
+        const int64_t t = start + (int64_t)i;
+        if (t < 0) {
+            left[i] = right[i] = 0.0f;
+        } else {
+            const size_t r = (size_t)(t & (kCapacity - 1)) * 2;
+            left[i] = ring[r];
+            right[i] = ring[r + 1];
+        }
     }
 }
 
@@ -218,6 +279,72 @@ static void processOutputLimiter(JamesDSPLib* jdsp, size_t n) {
     }
 }
 
+static void ensureScratch(State* st, size_t n) {
+    if (st->scratchL.size() < n) { /* only grows when the block size increases */
+        st->scratchL.resize(n);
+        st->scratchR.resize(n);
+    }
+}
+
+/*
+ * Runs a pitch shifter with gapless on/off switching (see ShifterFade). `restarted` is true when
+ * the shifter's output starts from silence again (it was re-enabled or rebuilt); `update` sets
+ * its parameters for this block (glide) and is only called while it is enabled.
+ */
+template <class Shifter, class Update>
+static void processShifter(State* st, Shifter& shifter, ShifterFade& f, bool enabled, bool restarted,
+                           int latency, float* left, float* right, size_t n, float fs, Update&& update) {
+    const int fadeLen = std::max(1, (int)(fs / 100.0f)); /* 10 ms */
+    if (enabled && (!f.running || restarted)) {
+        f.running = true;
+        f.warm = latency;
+        f.fadeIn = fadeLen;
+    }
+    if (!f.running)
+        return;
+
+    ensureScratch(st, n);
+    float* dryL = st->scratchL.data();
+    float* dryR = st->scratchR.data();
+    std::memcpy(dryL, left, n * sizeof(float));
+    std::memcpy(dryR, right, n * sizeof(float));
+
+    if (enabled)
+        update();
+    shifter.process(left, right, n);
+
+    if (!enabled) {
+        // Switched off: crossfade back to the dry signal (equal power), unless the shifted
+        // signal was not audible yet
+        f.running = false;
+        const size_t m = f.warm > 0 ? 0 : std::min<size_t>(n, fadeLen);
+        for (size_t i = 0; i < m; i++) {
+            const float a = kHalfPi * ((float)i + 0.5f) / (float)m;
+            const float g = std::cos(a), h = std::sin(a);
+            left[i] = left[i] * g + dryL[i] * h;
+            right[i] = right[i] * g + dryR[i] * h;
+        }
+        std::memcpy(left + m, dryL + m, (n - m) * sizeof(float));
+        std::memcpy(right + m, dryR + m, (n - m) * sizeof(float));
+        return;
+    }
+
+    for (size_t i = 0; i < n && (f.warm > 0 || f.fadeIn > 0); i++) {
+        if (f.warm > 0) {
+            // Output still silent: play the dry signal
+            left[i] = dryL[i];
+            right[i] = dryR[i];
+            f.warm--;
+        } else {
+            const float a = kHalfPi * ((float)(fadeLen - f.fadeIn) + 0.5f) / (float)fadeLen;
+            const float g = std::sin(a), h = std::cos(a);
+            left[i] = left[i] * g + dryL[i] * h;
+            right[i] = right[i] * g + dryR[i] * h;
+            f.fadeIn--;
+        }
+    }
+}
+
 static void orderedProcess(JamesDSPLib* jdsp, size_t n) {
     State* st = tlsState;
     if (st == nullptr) {
@@ -226,7 +353,18 @@ static void orderedProcess(JamesDSPLib* jdsp, size_t n) {
         return;
     }
 
-    for (int id : st->order) {
+    // Delay between each position and the output, for aligning mid-chain recorder taps
+    int afterPos[COUNT];
+    {
+        int sum = 0;
+        for (int pos = COUNT - 1; pos >= 0; pos--) {
+            afterPos[pos] = sum;
+            sum += st->latencyOf(st->order[pos], jdsp);
+        }
+    }
+
+    for (int pos = 0; pos < COUNT; pos++) {
+        const int id = st->order[pos];
         switch (id) {
             case TUBE:
                 if (jdsp->tubeEnabled)
@@ -283,28 +421,43 @@ static void orderedProcess(JamesDSPLib* jdsp, size_t n) {
                 if (st->compressor.enabled)
                     st->compressor.process(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n, jdsp->fs);
                 break;
-            case PITCH_SHIFT:
-                if (st->pitchShifter.isEnabled()) {
+            case PITCH_SHIFT: {
+                PitchShifter& ps = st->pitchShifter;
+                processShifter(st, ps, st->fadePitch, ps.isEnabled(), ps.resetPending(), PitchShifter::kLatency,
+                               jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n, jdsp->fs, [&] {
                     if (st->pitchGlide.active)
-                        st->pitchShifter.setParams(true, st->pitchGlide.advance(n, jdsp->fs));
-                    st->pitchShifter.process(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
-                }
+                        ps.setParams(true, st->pitchGlide.advance(n, jdsp->fs));
+                });
                 break;
-            case PITCH_SHIFT_HQ:
-                if (st->pitchShifterHq.isEnabled()) {
+            }
+            case PITCH_SHIFT_HQ: {
+                BungeePitchShifter& ps = st->pitchShifterHq;
+                const bool restarted = ps.generation() != st->fadePitchHq.generation;
+                st->fadePitchHq.generation = ps.generation();
+                processShifter(st, ps, st->fadePitchHq, ps.isEnabled(), restarted, BungeePitchShifter::kLatency,
+                               jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n, jdsp->fs, [&] {
                     if (st->pitchGlideHq.active)
-                        st->pitchShifterHq.setParams(true, st->pitchGlideHq.advance(n, jdsp->fs));
-                    st->pitchShifterHq.process(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
-                }
+                        ps.setParams(true, st->pitchGlideHq.advance(n, jdsp->fs));
+                });
                 break;
+            }
             case RECORDER:
             case RECORDER_B: {
                 // Last in the chain: recorded after the output stage below (exactly what is heard).
                 // Elsewhere: recorded here, with the output stage's gain + limiter applied to the copy.
+                // The copy is delayed by the latency of the effects after this position, so that
+                // recordings at different positions line up with each other and with the output.
                 RecorderTap* tap = id == RECORDER ? st->recorder : st->recorderB;
-                if (tap != nullptr && id != st->order[COUNT - 1])
-                    tap->writeLimited(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n,
-                                      jdsp->postGain, jdsp->limiter.threshold, jdsp->limiter.relCoef);
+                if (pos != COUNT - 1) {
+                    AlignDelay& align = id == RECORDER ? st->alignA : st->alignB;
+                    align.push(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
+                    if (tap != nullptr) {
+                        ensureScratch(st, n);
+                        align.read(afterPos[pos], st->scratchL.data(), st->scratchR.data(), n);
+                        tap->writeLimited(st->scratchL.data(), st->scratchR.data(), n,
+                                          jdsp->postGain, jdsp->limiter.threshold, jdsp->limiter.relCoef);
+                    }
+                }
                 break;
             }
             default:

@@ -84,6 +84,7 @@ class SpeedShiftBubble(context: Context) : FloatingBubble(
                 else com.google.android.material.R.attr.colorSecondaryContainer,
             foregroundAttr = if (active) com.google.android.material.R.attr.colorOnPrimary
                 else com.google.android.material.R.attr.colorOnSecondaryContainer,
+            active = active,
             alpha = if (active) 1f else 0.85f,
             contentDescription = if (active)
                 context.getString(R.string.speed_shift_bubble_on_desc, speedText)

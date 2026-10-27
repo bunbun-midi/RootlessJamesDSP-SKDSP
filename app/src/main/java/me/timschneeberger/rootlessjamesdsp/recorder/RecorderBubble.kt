@@ -69,6 +69,7 @@ class RecorderBubble(context: Context) : FloatingBubble(
                 value = elapsed,
                 backgroundAttr = com.google.android.material.R.attr.colorError,
                 foregroundAttr = com.google.android.material.R.attr.colorOnError,
+                active = true,
                 contentDescription = context.getString(R.string.recorder_bubble_recording_desc, elapsed)
             )
         } else {
@@ -77,6 +78,7 @@ class RecorderBubble(context: Context) : FloatingBubble(
                 value = context.getString(R.string.recorder_idle_value),
                 backgroundAttr = com.google.android.material.R.attr.colorSecondaryContainer,
                 foregroundAttr = com.google.android.material.R.attr.colorOnSecondaryContainer,
+                active = false,
                 alpha = 0.85f,
                 contentDescription = context.getString(R.string.recorder_bubble_idle_desc)
             )

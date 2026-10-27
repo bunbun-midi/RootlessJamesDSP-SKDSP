@@ -149,6 +149,8 @@
 
     <string name="key_bpm_enable" translatable="false">bpm_enable</string>
     <string name="key_bpm_range" translatable="false">bpm_range</string>
+    <string name="key_bpm_size" translatable="false">bpm_size</string>
+    <string name="key_bpm_lcd_buttons" translatable="false">bpm_lcd_buttons</string>
 
     <string name="key_keyboard_enable" translatable="false">keyboard_enable</string>
     <string name="key_power_bubble_enable" translatable="false">power_bubble_enable</string>
@@ -171,4 +173,4 @@
     <string name="key_limiter_threshold" translatable="false">limiter_threshold</string>
     <string name="key_limiter_release" translatable="false">limiter_release</string>
     <string name="key_output_postgain" translatable="false">output_postgain</string>
-</resources>
+</resources>

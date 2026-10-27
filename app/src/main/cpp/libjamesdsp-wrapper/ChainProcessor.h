@@ -21,6 +21,7 @@
 /* Keep includes minimal: this header is included by JamesDspWrapper.cpp, where Log.h declares a
  * global `namespace log` that clashes with <cmath>'s ::log. */
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "PitchShifter.h"
@@ -125,6 +126,29 @@ struct PitchGlide {
     }
 };
 
+/* Delay line for a recorder tap, so that both recordings line up with the output (and with each
+ * other) although effects after the tap delay the audio (see State::latencyOf). It is fed every
+ * block, so a recording starts with the right audio, not with silence. */
+struct AlignDelay {
+    static constexpr int kCapacity = 1 << 15; /* frames; > sum of all effect latencies (~16 k) */
+    std::vector<float> ring = std::vector<float>((size_t)kCapacity * 2, 0.0f);
+    uint64_t written = 0;
+
+    void push(const float* left, const float* right, size_t n);
+    /* The n frames that were pushed `delay` frames before the last n pushed frames */
+    void read(int delay, float* left, float* right, size_t n) const;
+};
+
+/* Switching a pitch shifter on/off without gaps or clicks: after (re)enabling, its output is
+ * silent for its latency, so the dry signal is played meanwhile and then crossfaded to the
+ * shifted signal; switching off crossfades back to the dry signal. */
+struct ShifterFade {
+    bool running = false;    /* the shifter is being processed */
+    int warm = 0;            /* frames until its output is valid */
+    int fadeIn = 0;          /* remaining crossfade frames (dry -> shifted) */
+    unsigned generation = 0; /* BungeePitchShifter::generation() at start */
+};
+
 struct State {
     State();
 
@@ -142,6 +166,14 @@ struct State {
     RecorderTap* recorder = nullptr;  /* Recorder A; not owned, see RecorderTap.h */
     RecorderTap* recorderB = nullptr; /* Recorder B */
     bool benchmarkHandled = false;
+
+    AlignDelay alignA, alignB;
+    ShifterFade fadePitch, fadePitchHq;
+    std::vector<float> scratchL, scratchR; /* tap and fade buffers; grown when the block grows */
+
+    /* Current output delay of an effect in frames (0 if disabled). Measured from libjamesdsp's
+     * state; verified against measurements in the host tests. */
+    int latencyOf(int id, const JamesDSPLib* dsp) const;
 };
 
 /* Default order: libjamesdsp's built-in order, plus the pitch shifter first and the compressor after the compander */

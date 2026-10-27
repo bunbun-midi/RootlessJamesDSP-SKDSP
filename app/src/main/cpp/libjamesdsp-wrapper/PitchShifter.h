@@ -30,6 +30,8 @@ public:
 
     void setParams(bool enable, float semitones);
     bool isEnabled() const { return enabled; }
+    /* True after (re)enabling until the first process(): the output starts from silence again */
+    bool resetPending() const { return needsReset; }
 
     /* In-place stereo processing; any block size */
     void process(float* left, float* right, size_t n);

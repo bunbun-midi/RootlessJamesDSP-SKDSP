@@ -58,8 +58,7 @@ void BungeePitchShifter::setParams(bool enable, float semitones) {
         enabled = true;
         rebuild(); // fresh state, allocated here rather than on the audio thread
     } else if (!enable && enabled) {
-        enabled = false;
-        stream.reset();
+        enabled = false; /* the stream is kept so the chain can fade the effect out */
     }
 }
 
@@ -68,6 +67,7 @@ void BungeePitchShifter::rebuild() {
     if (sampleRate <= 0.0f)
         return;
     stream = std::make_unique<BungeeStream>((int)std::lround(sampleRate));
+    builds++;
     outL.assign(kMaxBlockFrames, 0.0f);
     outR.assign(kMaxBlockFrames, 0.0f);
 }
