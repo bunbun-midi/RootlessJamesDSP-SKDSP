@@ -113,10 +113,17 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
         Cache.cleanup(this)
 
         try {
+            // Own folder: Cache.cleanup() deletes loose files in cacheDir at every start (it used to
+            // delete this log while it was being written). The previous run's log is kept, since it
+            // shows why audio processing stopped or the app crashed.
+            val logDir = logDir(this).apply { mkdirs() }
+            val log = File(logDir, LOG_FILE)
+            if (log.exists() && log.length() > 0)
+                log.renameTo(File(logDir, PREVIOUS_LOG_FILE))
             Timber.plant(
                 FileLoggerTree.Builder()
-                    .withFileName("application.log")
-                    .withDirName(this.cacheDir.absolutePath)
+                    .withFileName(LOG_FILE)
+                    .withDirName(logDir.absolutePath)
                     .withMinPriority(Log.VERBOSE)
                     .withSizeLimit(2 * 1000000)
                     .withFileLimit(1)
@@ -311,6 +318,10 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
 
 
     companion object {
+        const val LOG_FILE = "application.log"
+        const val PREVIOUS_LOG_FILE = "application.prev.log"
+        fun logDir(context: Context) = File(context.filesDir, "logs")
+
         lateinit var instance: MainApplication
             private set
     }

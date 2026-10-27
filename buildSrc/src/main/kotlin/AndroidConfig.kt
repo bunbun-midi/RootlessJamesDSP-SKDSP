@@ -5,7 +5,7 @@ object AndroidConfig {
     const val targetSdk = 36
 
     const val versionName = "1.0.1"
-    const val versionCode = 2
+    const val versionCode = 3
 
     const val kotlinVersion = "2.1.0"
     const val kspVersion = "2.1.0-1.0.29"

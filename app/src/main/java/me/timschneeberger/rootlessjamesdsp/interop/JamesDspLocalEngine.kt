@@ -10,6 +10,8 @@ import java.util.Timer
 import kotlin.concurrent.schedule
 
 class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspCallbacks? = null) : JamesDspBaseEngine(context, callbacks) {
+    // Read by the audio thread, cleared by close() on another thread
+    @Volatile
     var handle: JamesDspHandle = JamesDspWrapper.alloc(callbacks ?: DummyCallbacks())
 
     override var sampleRate: Float
@@ -40,50 +42,47 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
     // Processing
     fun processInt16(input: ShortArray, output: ShortArray, offset: Int = -1, length: Int = -1)
     {
-        if(!enabled || handle == 0L)
-        {
-            if(offset < 0 && length < 0) {
-                input.copyInto(output)
-            }
-            else {
-                input.copyInto(output, 0, offset, offset + length)
-            }
+        // The dry signal first: if the native call returns without writing (engine being freed),
+        // the output must not keep the previous block (that would be played again and again)
+        if(offset < 0 && length < 0) {
+            input.copyInto(output)
         }
         else {
-            JamesDspWrapper.processInt16(handle, input, output, offset, length)
+            input.copyInto(output, 0, offset, offset + length)
         }
+        val h = handle
+        if(enabled && h != 0L)
+            JamesDspWrapper.processInt16(h, input, output, offset, length)
     }
 
     fun processInt32(input: IntArray, output: IntArray, offset: Int = -1, length: Int = -1)
     {
-        if(!enabled || handle == 0L)
-        {
-            if(offset < 0 && length < 0) {
-                input.copyInto(output)
-            }
-            else {
-                input.copyInto(output, 0, offset, offset + length)
-            }
+        // The dry signal first: if the native call returns without writing (engine being freed),
+        // the output must not keep the previous block (that would be played again and again)
+        if(offset < 0 && length < 0) {
+            input.copyInto(output)
         }
         else {
-            JamesDspWrapper.processInt32(handle, input, output, offset, length)
+            input.copyInto(output, 0, offset, offset + length)
         }
+        val h = handle
+        if(enabled && h != 0L)
+            JamesDspWrapper.processInt32(h, input, output, offset, length)
     }
 
     fun processFloat(input: FloatArray, output: FloatArray, offset: Int = -1, length: Int = -1)
     {
-        if(!enabled || handle == 0L)
-        {
-            if(offset < 0 && length < 0) {
-                input.copyInto(output)
-            }
-            else {
-                input.copyInto(output, 0, offset, offset + length)
-            }
+        // The dry signal first: if the native call returns without writing (engine being freed),
+        // the output must not keep the previous block (that would be played again and again)
+        if(offset < 0 && length < 0) {
+            input.copyInto(output)
         }
         else {
-            JamesDspWrapper.processFloat(handle, input, output, offset, length)
+            input.copyInto(output, 0, offset, offset + length)
         }
+        val h = handle
+        if(enabled && h != 0L)
+            JamesDspWrapper.processFloat(h, input, output, offset, length)
     }
 
     // Effect config

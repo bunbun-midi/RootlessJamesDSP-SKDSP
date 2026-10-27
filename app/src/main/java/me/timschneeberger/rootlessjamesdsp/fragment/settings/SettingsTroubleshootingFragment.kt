@@ -19,6 +19,7 @@ import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.sh
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.toast
 import me.timschneeberger.rootlessjamesdsp.utils.sdkAbove
 import org.koin.android.ext.android.inject
+import me.timschneeberger.rootlessjamesdsp.MainApplication
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
@@ -36,9 +37,25 @@ class SettingsTroubleshootingFragment : SettingsBaseFragment() {
             val path = File(requireContext().filesDir, "dump.txt")
             val output = FileOutputStream(path)
             val writer = OutputStreamWriter(output)
-            val log = File(requireContext().cacheDir, "application.log")
+            val logDir = MainApplication.logDir(requireContext())
+            val log = File(logDir, MainApplication.LOG_FILE)
+            val previousLog = File(logDir, MainApplication.PREVIOUS_LOG_FILE)
 
             writer.write(debug)
+
+            // Previous run first (e.g. the run in which processing stopped or the app crashed)
+            if (previousLog.exists()) {
+                writer.write("==================> Previous application log\n")
+                writer.flush()
+                try {
+                    previousLog.inputStream().use { it.copyTo(output) }
+                    output.flush()
+                }
+                catch (ex: Exception) {
+                    writer.write("NOTE: Failed to append previous log file.\n$ex\n")
+                }
+            }
+
             writer.write("==================> Application log\n")
             writer.flush()
 

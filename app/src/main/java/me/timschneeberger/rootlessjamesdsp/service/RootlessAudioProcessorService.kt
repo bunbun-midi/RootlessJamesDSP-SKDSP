@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.annotation.RequiresApi
 import androidx.core.content.getSystemService
@@ -98,6 +99,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     @Volatile
     private var recreateRecorderRequested = false
     private var recorderThread: Thread? = null
+    // The audio thread's current recorder and track: stopping the thread stops the recorder (a
+    // blocked read only returns then) and, if the thread still does not end, silences its track
+    @Volatile
+    private var activeRecorder: AudioRecord? = null
+    @Volatile
+    private var activeTrack: AudioTrack? = null
+    // Times of recent audio thread failures (the pipeline is restarted instead of stopping)
+    private val audioFailureTimes = ArrayDeque<Long>()
+    private val mainHandler = Handler(Looper.getMainLooper())
     private lateinit var engine: JamesDspLocalEngine
     private val isRunning: Boolean
         get() = recorderThread != null
@@ -285,7 +295,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             stopSelf()
         }
 
-        return START_REDELIVER_INTENT
+        // Not restarted by the system: the capture permission (MediaProjection token) can only be
+        // used once, so a restarted service could not capture anything, but it would still mute
+        // the playing apps (no sound until processing is switched on again).
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -313,9 +326,22 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         stopFileRecording()
         session.forEach { it.awaitFinished(2000) }
 
-        // Stop recording and release engine
-        stopRecording()
-        engine.close()
+        // Stop recording and release engine. If the audio thread is still stuck, the engine is only
+        // freed once it has finished (freeing it underneath a running thread crashes the app or
+        // replays the last block); if it never finishes, the engine is left allocated.
+        val stuckThread = stopRecording()
+        if (stuckThread == null) {
+            engine.close()
+        } else {
+            val stuckEngine = engine
+            Thread {
+                stuckThread.join(AUDIO_THREAD_EXIT_WAIT_MS)
+                if (stuckThread.isAlive)
+                    Timber.e("onDestroy: audio thread still running; not freeing its engine")
+                else
+                    stuckEngine.close()
+            }.start()
+        }
 
         // Stop foreground service
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -817,6 +843,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         try {
             recorder = buildAudioRecord(encodingFormat, sampleRate, recordBufferBytes)
             track = buildAudioTrack(encodingFormat, sampleRate, trackBufferBytes)
+            activeRecorder = recorder
+            activeTrack = track
         }
         catch(ex: Exception) {
             Timber.e("Failed to create initial audio record/track")
@@ -1075,6 +1103,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                         // Recreate recorder with new AudioPlaybackRecordingConfiguration
                         recorder = buildAudioRecord(encodingFormat, sampleRate, recordBufferBytes)
+                        activeRecorder = recorder
                         historyCount = 0
                         Timber.d("Recorder recreated")
                     }
@@ -1129,10 +1158,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     }
 
                     // Capture exactly one full block, then process it
+                    val readStart = System.nanoTime()
                     val readResult = if(encoding == AudioEncoding.PcmShort)
                         readFully(recorder, shortBuffer)
                     else
                         readFully(recorder, floatBuffer)
+                    val readMs = (System.nanoTime() - readStart) / 1_000_000
+                    if (readMs > CAPTURE_STALL_LOG_MS)
+                        Timber.w("Capture stalled for $readMs ms (idle=$isProcessorIdle)")
 
                     if(readResult < 0) {
                         // Don't process & replay stale data; rebuild the recorder instead
@@ -1210,6 +1243,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         Timber.w("AudioTrack is dead; recreating track")
                         track.release()
                         track = buildAudioTrack(encodingFormat, sampleRate, trackBufferBytes)
+                        activeTrack = track
                         continue
                     }
                     else if(writeResult < 0) {
@@ -1229,7 +1263,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             } catch (e: Exception) {
                 Timber.e("Exception in recorderThread raised")
                 Timber.e(e)
-                stopSelf()
+                // Restart the pipeline instead of silently switching processing off
+                if (generation == processorGeneration && !isProcessorDisposing)
+                    mainHandler.post { onAudioThreadFailed(e) }
             } finally {
                 if (bpmDetector != 0L)
                     BpmDetector.nativeDestroy(bpmDetector)
@@ -1248,9 +1284,31 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 recorder.release()
                 track.release()
+                if (activeRecorder === recorder)
+                    activeRecorder = null
+                if (activeTrack === track)
+                    activeTrack = null
             }
         }
         recorderThread!!.start()
+    }
+
+    /** Main thread: the audio thread ended with an exception */
+    private fun onAudioThreadFailed(ex: Exception) {
+        if (isServiceDisposing || isProcessorDisposing)
+            return
+        val now = SystemClock.elapsedRealtime()
+        while (audioFailureTimes.isNotEmpty() && now - audioFailureTimes.first() > AUDIO_FAILURE_WINDOW_MS)
+            audioFailureTimes.removeFirst()
+        if (audioFailureTimes.size < AUDIO_FAILURE_MAX_RESTARTS) {
+            audioFailureTimes.addLast(now)
+            Timber.w("Restarting audio processing after an error (${audioFailureTimes.size}/$AUDIO_FAILURE_MAX_RESTARTS)")
+            restartRecording()
+        } else {
+            Timber.e("Audio processing failed repeatedly; stopping")
+            toast(getString(R.string.audio_processing_failed_toast, ex.message ?: ex.javaClass.simpleName), false)
+            stopSelf()
+        }
     }
 
     /**
@@ -1284,19 +1342,38 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         return offset
     }
 
-    // Terminate recording thread
-    fun stopRecording() {
-        val thread = recorderThread ?: return
+    /** Terminates the audio thread; returns it if it is still running after the wait, else null */
+    fun stopRecording(): Thread? {
+        val thread = recorderThread ?: return null
         isProcessorDisposing = true
         // Retire this thread for good: a restart resets isProcessorDisposing, and a thread that
         // was still blocked in read()/write() would otherwise keep running next to the new one
         // (two copies of the audio playing slightly apart = echo).
         processorGeneration++
         thread.interrupt()
+        // A read blocked in the recorder only returns once the recorder is stopped
+        try {
+            activeRecorder?.stop()
+        } catch (ex: Exception) {
+            Timber.d(ex)
+        }
         thread.join(2000)
-        if (thread.isAlive)
+        if (thread.isAlive) {
             Timber.w("stopRecording: audio thread did not stop within 2 s; it exits after its current block")
+            // Whatever it is stuck in, it must not keep playing (stale or repeating audio)
+            try {
+                activeTrack?.let {
+                    it.pause()
+                    it.flush()
+                }
+            } catch (ex: Exception) {
+                Timber.d(ex)
+            }
+        }
+        activeRecorder = null
+        activeTrack = null
         recorderThread = null
+        return thread.takeIf { it.isAlive }
     }
 
     // Hard restart recording thread
@@ -1409,6 +1486,13 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     companion object {
         const val SESSION_LOSS_MAX_RETRIES = 1
+        /** Audio thread errors: restart the pipeline up to this often per window, then stop */
+        private const val AUDIO_FAILURE_MAX_RESTARTS = 2
+        private const val AUDIO_FAILURE_WINDOW_MS = 60_000L
+        /** A capture read taking longer than this is logged (diagnostics) */
+        private const val CAPTURE_STALL_LOG_MS = 500L
+        /** Service shutdown: how long to wait for a stuck audio thread before leaving its engine */
+        private const val AUDIO_THREAD_EXIT_WAIT_MS = 30_000L
         /** Peak level below which captured audio counts as silence (-60 dBFS; track gaps) */
         private const val SILENCE_PEAK = 0.001f
 

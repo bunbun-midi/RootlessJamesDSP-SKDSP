@@ -32,6 +32,7 @@
     <string name="notification_request_permission">Tap to grant capture permission and enable JamesDSP\'s audio processing</string>
 
     <!-- Session control loss notifications -->
+    <string name="audio_processing_failed_toast">Audio processing stopped after repeated errors: %1$s</string>
     <string name="session_control_loss_toast">JamesDSP stopped due to audio session control loss. Please disable other audio effect apps.</string>
     <string name="session_control_loss_notification_title">Audio processing stopped. Another app is interfering with JamesDSP.</string>
     <string name="session_control_loss_notification">Please disable all other apps that provide global audio effects before re-enabling JamesDSP.</string>

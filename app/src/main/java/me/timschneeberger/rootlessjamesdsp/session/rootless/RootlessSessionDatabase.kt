@@ -52,12 +52,19 @@ class RootlessSessionDatabase(context: Context) : BaseSessionDatabase(context) {
         (item as MutedEffectSession).run {
             try {
                 audioMuteEffect?.enabled = false
-                audioMuteEffect?.release()
             }
             catch (ex: Exception) {
                 Timber.e("onSessionRemoved: effect already destroyed")
                 Timber.d(ex)
             }
+            // Always release: an unreleased mute effect keeps the app silent until it is garbage collected
+            try {
+                audioMuteEffect?.release()
+            }
+            catch (ex: Exception) {
+                Timber.d(ex)
+            }
+            audioMuteEffect = null
         }
     }
 
