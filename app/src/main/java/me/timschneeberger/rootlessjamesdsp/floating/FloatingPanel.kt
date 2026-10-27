@@ -29,11 +29,15 @@ import kotlin.math.abs
  * e.g. the BPM display or the piano keyboard. Subclasses build their view in [createView] and
  * call [makeDraggable] on the part that moves the panel. The position is saved in
  * [positionPrefs] under "<positionKey>_x/_y".
+ *
+ * A [focusable] panel can take keyboard input (e.g. a text field); touches outside it still go
+ * to the app below and are reported to [onOutsideTouch].
  */
 abstract class FloatingPanel(
     protected val context: Context,
     protected val positionPrefs: SharedPreferences,
     protected val positionKey: String,
+    private val focusable: Boolean = false,
 ) : KoinComponent {
     private val preferences: Preferences.App by inject()
 
@@ -58,10 +62,16 @@ abstract class FloatingPanel(
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+        if (focusable)
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        else
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
         PixelFormat.TRANSLUCENT
     ).apply {
         gravity = Gravity.TOP or Gravity.START
+        if (focusable)
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
     }
 
     private var root: View? = null
@@ -79,6 +89,8 @@ abstract class FloatingPanel(
 
     protected open fun onShown() {}
     protected open fun onHidden() {}
+    /** Focusable panels: a touch outside the panel */
+    protected open fun onOutsideTouch() {}
 
     fun show() {
         if (isShown)
@@ -97,6 +109,15 @@ abstract class FloatingPanel(
         params.x = positionPrefs.getInt("${positionKey}_x", default.x)
         params.y = positionPrefs.getInt("${positionKey}_y", default.y)
         clampPosition(view)
+
+        if (focusable) {
+            view.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
+                    onOutsideTouch()
+                    true
+                } else false
+            }
+        }
 
         try {
             windowManager.addView(view, params)

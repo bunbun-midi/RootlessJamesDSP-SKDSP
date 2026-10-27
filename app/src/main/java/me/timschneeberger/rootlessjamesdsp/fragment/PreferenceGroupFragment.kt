@@ -277,7 +277,9 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
         // seekBarIncrement is an integer attribute (AndroidX), so fractional steps are set here
         speedPreference?.setSeekBarIncrement(SpeedShiftController.SPEED_RESOLUTION)
         findPreference<MaterialSeekbarPreference>(getString(R.string.key_speed_shift_step))
-            ?.setSeekBarIncrement(SpeedShiftController.SPEED_RESOLUTION)
+            ?.setSeekBarIncrement(SpeedShiftController.STEP_RESOLUTION)
+        findPreference<MaterialSeekbarPreference>(getString(R.string.key_speed_shift_step_fine))
+            ?.setSeekBarIncrement(SpeedShiftController.FINE_STEP_RESOLUTION)
         val bubbleKey = getString(R.string.key_speed_shift_bubble)
         val speedKey = getString(R.string.key_speed_shift_speed)
 

@@ -55,6 +55,7 @@ import me.timschneeberger.rootlessjamesdsp.session.rootless.RootlessSessionManag
 import me.timschneeberger.rootlessjamesdsp.session.rootless.SessionRecordingPolicyManager
 import me.timschneeberger.rootlessjamesdsp.speedshift.SpeedShiftBubble
 import me.timschneeberger.rootlessjamesdsp.speedshift.SpeedShiftController
+import me.timschneeberger.rootlessjamesdsp.speedshift.TempoMatcher
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
 import me.timschneeberger.rootlessjamesdsp.utils.Constants.ACTION_PREFERENCES_UPDATED
 import me.timschneeberger.rootlessjamesdsp.utils.Constants.ACTION_SAMPLE_RATE_UPDATED
@@ -348,7 +349,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         when (key) {
             getString(R.string.key_speed_shift_bubble) -> updateSpeedShiftBubble()
             getString(R.string.key_speed_shift_speed),
-            getString(R.string.key_speed_shift_step) -> SpeedShiftController.loadFromPreferences(this)
+            getString(R.string.key_speed_shift_step),
+            getString(R.string.key_speed_shift_step_fine) -> SpeedShiftController.loadFromPreferences(this)
         }
     }
 
@@ -405,6 +407,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
         // The detector only runs while the display is visible
         BpmController.isEnabled = bpmDisplay?.isShown == true
+        // Target tempo mode needs the detector (and is controlled from the display)
+        if (!BpmController.isEnabled)
+            SpeedShiftController.setTargetBpm(this, 0f)
     }
 
     private fun updateKeyboardPanel() {
@@ -860,6 +865,11 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 var historyCount = 0  // blocks filled so far
                 val bpmBuffer = FloatArray(bufferSize)
                 val shiftOutBuffer = FloatArray(bufferSize)
+                // Target tempo mode (BPM display): speed follows the detected tempo of what is played
+                val tempoMatcher = TempoMatcher(sampleRate)
+                var targetWasActive = false
+                var manualGlide = false // gliding back to the manual speed after target mode ended
+                var capturedFrames = 0L // all audio captured by this thread (positions for the tempo map)
                 // While idle, keep playing until the slowed-down backlog has been played (System.nanoTime)
                 var idleSuspendAt = 0L
 
@@ -870,6 +880,46 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     }
                     speedShiftWasActive = false
                     SpeedShiftController.backlogSeconds = 0f
+                    targetWasActive = false
+                    manualGlide = false
+                    SpeedShiftController.appliedSpeed = SpeedShiftController.speed
+                    SpeedShiftController.playingBpm = 0f
+                    SpeedShiftController.targetLimited = false
+                }
+
+                /**
+                 * Speed for this block: the manual speed, or in target tempo mode the speed that
+                 * makes the audio being played (capture position [playPos]) have the target tempo.
+                 */
+                fun currentSpeed(playPos: Long): Float {
+                    val target = SpeedShiftController.targetBpm
+                    val speed = if (target > 0f) {
+                        if (!targetWasActive) {
+                            // Start from the speed playing now (1.0 if slow-down was just switched on)
+                            val now = if (speedShifter != 0L && speedShiftWasActive) SpeedShiftController.appliedSpeed else 1f
+                            tempoMatcher.start(now, BpmController.bpm)
+                            targetWasActive = true
+                        }
+                        tempoMatcher.onDetected(BpmController.bpm, capturedFrames)
+                        tempoMatcher.next(playPos, target, blockFrames).also {
+                            SpeedShiftController.playingBpm = tempoMatcher.playingTempo
+                            SpeedShiftController.targetLimited = tempoMatcher.isLimited
+                        }
+                    } else {
+                        if (targetWasActive) {
+                            // Target mode ended: glide to the manual speed
+                            targetWasActive = false
+                            manualGlide = true
+                            SpeedShiftController.playingBpm = 0f
+                            SpeedShiftController.targetLimited = false
+                        }
+                        tempoMatcher.nextManual(SpeedShiftController.speed, blockFrames, manualGlide).also {
+                            if (!tempoMatcher.isGliding)
+                                manualGlide = false
+                        }
+                    }
+                    SpeedShiftController.appliedSpeed = speed
+                    return speed
                 }
 
                 fun recordHistory(dry: FloatArray) {
@@ -910,6 +960,10 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     }
 
                     val switchingOn = active && speedShifter == 0L
+                    // Capture position of the audio this block plays (captured minus backlog)
+                    val playPos = capturedFrames - blockFrames -
+                        (if (speedShifter != 0L) SpeedShifter.nativeBacklogFrames(speedShifter) else 0L)
+                    val speed = currentSpeed(playPos)
                     if (switchingOn) {
                         speedShifter = SpeedShifter.nativeCreate(sampleRate)
                         if (speedShifter == 0L) {
@@ -918,14 +972,14 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                             recordHistory(dry)
                             return
                         }
-                        SpeedShifter.nativeSetSpeed(speedShifter, SpeedShiftController.speed)
+                        SpeedShifter.nativeSetSpeed(speedShifter, speed)
                         SpeedShifter.nativeStart(speedShifter, historyLinear, linearizeHistory())
                     }
                     recordHistory(dry)
                     if (speedShifter == 0L)
                         return
 
-                    SpeedShifter.nativeSetSpeed(speedShifter, SpeedShiftController.speed)
+                    SpeedShifter.nativeSetSpeed(speedShifter, speed)
                     SpeedShifter.nativeProcess(speedShifter, dry, shiftOutBuffer, blockFrames)
 
                     if (!switchingOn && active != speedShiftWasActive) {
@@ -998,7 +1052,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         val now = System.nanoTime()
                         if(idleSuspendAt == 0L) {
                             val drainSeconds = if(speedShifter != 0L)
-                                SpeedShiftController.backlogSeconds / SpeedShiftController.speed + 0.5f
+                                SpeedShiftController.backlogSeconds / SpeedShiftController.appliedSpeed + 0.5f
                             else 0f
                             idleSuspendAt = now + (drainSeconds * 1e9f).toLong() + 1
                         }
@@ -1055,6 +1109,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         // Recording was stopped while reading (e.g. recorder recreation)
                         continue
                     }
+                    capturedFrames += blockFrames
 
                     // Tempo detection on the original (not slowed down) audio
                     if (BpmController.isEnabled) {

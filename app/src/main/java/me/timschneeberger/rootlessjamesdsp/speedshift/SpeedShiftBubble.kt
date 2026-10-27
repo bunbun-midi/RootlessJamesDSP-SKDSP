@@ -7,7 +7,8 @@ import me.timschneeberger.rootlessjamesdsp.floating.FloatingBubble
 /**
  * Floating button that controls the speed shifter:
  *  - tap: toggle slow-down on/off
- *  - swipe up/down: change the speed by the configured step (the multiple is shown next to the button)
+ *  - swipe up/down: change the speed by the configured step (the multiple is shown next to the button);
+ *    in target tempo mode this ends target mode and continues manually from the current speed
  *  - long-press and drag: move the button
  */
 class SpeedShiftBubble(context: Context) : FloatingBubble(
@@ -60,6 +61,11 @@ class SpeedShiftBubble(context: Context) : FloatingBubble(
 
     override fun onSwipeStart() {
         handler.removeCallbacks(hideLabelRunnable)
+        if (SpeedShiftController.targetBpm > 0f) {
+            // Take over manually from the speed target mode is using right now
+            SpeedShiftController.setSpeed(context, SpeedShiftController.appliedSpeed)
+            SpeedShiftController.setTargetBpm(context, 0f)
+        }
         swipeStartSpeed = SpeedShiftController.speed
     }
 
@@ -75,7 +81,10 @@ class SpeedShiftBubble(context: Context) : FloatingBubble(
 
     override fun render() {
         val active = SpeedShiftController.isActive
-        val speedText = SpeedShiftController.formatSpeed(SpeedShiftController.speed)
+        // In target tempo mode the speed is chosen continuously by the audio thread
+        val shown = if (active && SpeedShiftController.targetBpm > 0f) SpeedShiftController.appliedSpeed
+            else SpeedShiftController.speed
+        val speedText = SpeedShiftController.formatSpeed(shown)
 
         setAppearance(
             icon = R.drawable.ic_slow_motion_24dp,

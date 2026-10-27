@@ -141,6 +141,7 @@
     <string name="key_speed_shift_bubble" translatable="false">speed_shift_bubble</string>
     <string name="key_speed_shift_speed" translatable="false">speed_shift_speed</string>
     <string name="key_speed_shift_step" translatable="false">speed_shift_step</string>
+    <string name="key_speed_shift_step_fine" translatable="false">speed_shift_step_fine</string>
 
     <string name="key_recorder_enable" translatable="false">recorder_enable</string>
     <string name="key_recorder_format" translatable="false">recorder_format</string>

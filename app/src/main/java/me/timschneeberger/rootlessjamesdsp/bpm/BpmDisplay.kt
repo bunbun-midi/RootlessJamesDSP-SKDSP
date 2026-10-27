@@ -8,6 +8,7 @@ import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
@@ -16,12 +17,14 @@ import me.timschneeberger.rootlessjamesdsp.R
 import me.timschneeberger.rootlessjamesdsp.floating.FloatingPanel
 import me.timschneeberger.rootlessjamesdsp.floating.LcdStyle
 import me.timschneeberger.rootlessjamesdsp.speedshift.SpeedShiftController
+import me.timschneeberger.rootlessjamesdsp.speedshift.TempoMatcher
 import java.util.Locale
 
 /**
  * Floating retro-LCD tempo display: detected BPM and, while the speed shifter slows playback
- * down, the resulting BPM. Drag to move; tap to forget the estimate and listen again.
- * Its size is set in the BPM display settings (30..100 %; the original size is 90 %).
+ * down, the resulting BPM. Drag to move; tap to forget the estimate and listen again;
+ * double-tap to enter a target tempo (see BpmTargetInput / TempoMatcher).
+ * Its size is set in the BPM display settings (30..100 %, default 55 %; the original size is 90 %).
  */
 class BpmDisplay(context: Context) : FloatingPanel(context, BpmController.prefs(context), "bpm_display") {
     private lateinit var label: TextView
@@ -29,6 +32,15 @@ class BpmDisplay(context: Context) : FloatingPanel(context, BpmController.prefs(
     private lateinit var adjusted: TextView
     private lateinit var panel: LinearLayout
     private lateinit var panelBackground: GradientDrawable
+    private var targetInput: BpmTargetInput? = null
+
+    // A single tap (listen again) waits for a possible second tap (target tempo input)
+    private var tapPending = false
+    private val singleTap = Runnable {
+        tapPending = false
+        BpmController.requestReset()
+        render()
+    }
 
     private val sizeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == context.getString(R.string.key_bpm_size))
@@ -79,22 +91,28 @@ class BpmDisplay(context: Context) : FloatingPanel(context, BpmController.prefs(
             contentDescription = context.getString(R.string.bpm_display_title)
 
             makeDraggable(this) {
-                BpmController.requestReset()
-                render()
+                if (tapPending) {
+                    handler.removeCallbacks(singleTap)
+                    tapPending = false
+                    openTargetInput()
+                } else {
+                    tapPending = true
+                    handler.postDelayed(singleTap, ViewConfiguration.getDoubleTapTimeout().toLong())
+                }
             }
         }
         applyScale()
         return panel
     }
 
-    /** Sizes everything by the size setting; 90 % is the original size */
+    /** Sizes everything by the size setting; 90 % is the original size, 55 % the default */
     private fun applyScale() {
         if (!::panel.isInitialized)
             return
         val percent = BpmController.prefs(context)
             .getFloat(context.getString(R.string.key_bpm_size), DEFAULT_SIZE_PERCENT)
             .coerceIn(MIN_SIZE_PERCENT, 100f)
-        val s = percent / DEFAULT_SIZE_PERCENT
+        val s = percent / REFERENCE_SIZE_PERCENT
         fun px(dpValue: Float) = (dpValue * s * density).toInt()
 
         for ((view, sp) in listOf(label to 11f, value to 34f, adjusted to 13f)) {
@@ -119,32 +137,56 @@ class BpmDisplay(context: Context) : FloatingPanel(context, BpmController.prefs(
 
     override fun onHidden() {
         BpmController.prefs(context).unregisterOnSharedPreferenceChangeListener(sizeListener)
+        tapPending = false
+        targetInput?.close()
+        targetInput = null
+    }
+
+    private fun openTargetInput() {
+        if (targetInput != null)
+            return
+        targetInput = BpmTargetInput(context) { targetInput = null }.also { it.show() }
+        if (targetInput?.isShown != true)
+            targetInput = null
     }
 
     private fun render() {
         val bpm = BpmController.fold(BpmController.bpm, BpmController.range(context))
         val known = bpm > 0f
 
-        label.text = context.getString(if (known) R.string.bpm_display_label else R.string.bpm_display_listening)
+        val target = SpeedShiftController.targetBpm
+        label.text = when {
+            target > 0f -> context.getString(R.string.bpm_display_target_label, BpmTargetInput.formatBpm(target))
+            known -> context.getString(R.string.bpm_display_label)
+            else -> context.getString(R.string.bpm_display_listening)
+        }
         value.text = if (known) String.format(Locale.US, "%.1f", bpm) else "---.-"
         value.alpha = if (known && BpmController.confidence < LOW_CONFIDENCE) 0.55f else 1f
 
-        // While slowed down: the tempo that is actually playing
-        val speed = SpeedShiftController.speed
-        val slowed = SpeedShiftController.isActive && speed < 1f
-        adjusted.isVisible = slowed
-        if (slowed) {
-            adjusted.text = if (known)
-                String.format(Locale.US, "×%.2f → %.1f", speed, bpm * speed)
-            else
-                String.format(Locale.US, "×%.2f", speed)
+        // While slowed down: the speed and the tempo that is actually playing. In target mode the
+        // playing tempo comes from the audio being played (behind the detected one by the backlog).
+        val active = SpeedShiftController.isActive
+        val speed = if (active) SpeedShiftController.appliedSpeed else SpeedShiftController.speed
+        val playing = if (target > 0f)
+            TempoMatcher.foldToTarget(SpeedShiftController.playingBpm, target) // same octave as the target
+        else bpm
+        adjusted.isVisible = active && (speed < 1f || target > 0f)
+        if (adjusted.isVisible) {
+            adjusted.text = when {
+                target > 0f && SpeedShiftController.targetLimited ->
+                    context.getString(R.string.bpm_display_target_limited)
+                playing > 0f -> String.format(Locale.US, "×%.3f → %.2f", speed, playing * speed)
+                else -> String.format(Locale.US, "×%.3f", speed)
+            }
         }
     }
 
     companion object {
         private const val REFRESH_MS = 250L
         private const val LOW_CONFIDENCE = 0.2f
-        private const val DEFAULT_SIZE_PERCENT = 90f
+        private const val DEFAULT_SIZE_PERCENT = 55f
+        /** Size setting at which the display has its original size */
+        private const val REFERENCE_SIZE_PERCENT = 90f
         private const val MIN_SIZE_PERCENT = 30f
     }
 }

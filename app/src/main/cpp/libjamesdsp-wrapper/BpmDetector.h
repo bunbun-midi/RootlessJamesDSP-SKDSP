@@ -8,7 +8,10 @@
  * spectral-flux onset envelope (FFT 256, hop 64 -> ~190 frames/s) and, once per second,
  * estimates the tempo from the autocorrelation of the last ~8 s of onsets
  * (60-200 BPM, harmonic enhancement + log-normal tempo prior around 120 BPM).
- * No allocations after construction; a few hundred microseconds per estimate.
+ * The beat period is then refined over many beats (autocorrelation peaks at k beat periods, up
+ * to ~20 s of audio while the tempo is steady), which makes the estimate precise to about
+ * 0.01 % (needed to match a target tempo).
+ * No allocations after construction; about a millisecond per estimate.
  *
  * Any thread: bpm()/confidence() read the latest (smoothed) result.
  */
@@ -34,7 +37,7 @@ public:
     static constexpr int kDecimation = 4;
     static constexpr int kFftSize = 256;
     static constexpr int kHop = 64;
-    static constexpr int kOnsetFrames = 2048; /* onset history (power of two) */
+    static constexpr int kOnsetFrames = 4096; /* onset history (power of two), ~22 s */
     static constexpr float kMinBpm = 60.0f;
     static constexpr float kMaxBpm = 200.0f;
 
@@ -42,6 +45,9 @@ private:
     void analyzeFrame();
     void estimateTempo();
     void fft(float* re, float* im) const;
+    /* Detrended onsets of the last n frames into `work`; returns their energy */
+    double detrend(int n);
+    float refineLag(float lag, int minLag, int maxLag);
 
     const float frameRate; /* onset frames per second */
 
@@ -62,6 +68,7 @@ private:
     int onsetWrite = 0;
     int onsetCount = 0;
     int framesSinceEstimate = 0;
+    int stableFrames = 0;         /* onset frames since the tempo last changed (jump/silence/reset) */
     std::vector<float> work, acf;
 
     /* result smoothing */

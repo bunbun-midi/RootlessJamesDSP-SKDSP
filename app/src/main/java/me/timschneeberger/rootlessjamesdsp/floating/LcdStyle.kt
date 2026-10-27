@@ -20,5 +20,5 @@ object LcdStyle {
 
     /** Whether the floating buttons should use this palette (stored with the BPM display settings) */
     fun buttonsEnabled(context: Context): Boolean =
-        BpmController.prefs(context).getBoolean(context.getString(R.string.key_bpm_lcd_buttons), false)
+        BpmController.prefs(context).getBoolean(context.getString(R.string.key_bpm_lcd_buttons), true)
 }

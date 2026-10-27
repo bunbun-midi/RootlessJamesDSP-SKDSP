@@ -754,6 +754,8 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="speed_shift_speed">Speed</string>
     <string name="speed_shift_speed_unit">\u00d7</string>
     <string name="speed_shift_step">Swipe step</string>
+    <string name="speed_shift_step_fine">Swipe step, fine</string>
+    <string name="speed_shift_step_fine_summary">Added to the swipe step (0.001 steps)</string>
     <string name="speed_shift_permission_required">Allow \"Display over other apps\" to show the floating speed button</string>
     <string name="speed_shift_bubble_off_desc">Speed shift off. Tap to slow down to %1$s</string>
     <string name="speed_shift_bubble_on_desc">Speed shift on at %1$s. Tap to turn off, swipe up or down to change speed</string>
@@ -787,9 +789,19 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
 
     <!-- BPM display -->
     <string name="bpm_display_title">BPM display</string>
-    <string name="bpm_display_summary">Shows the tempo of the playing audio in a floating display while audio processing is on, and the slowed-down tempo while the speed shifter is active. Tap the display to listen again, drag it to move it.</string>
+    <string name="bpm_display_summary">Shows the tempo of the playing audio in a floating display while audio processing is on, and the slowed-down tempo while the speed shifter is active. Tap the display to listen again, double-tap it to set a target tempo, drag it to move it.</string>
     <string name="bpm_display_label">BPM</string>
     <string name="bpm_display_listening">BPM \u00b7 listening</string>
+    <string name="bpm_display_target_label">BPM \u00b7 TARGET %1$s</string>
+    <string name="bpm_display_target_limited">\u00d71.000 \u00b7 target too fast</string>
+    <string name="bpm_target_title">Target tempo</string>
+    <string name="bpm_target_detected">Detected: %1$s BPM</string>
+    <string name="bpm_target_not_detected">No tempo detected yet</string>
+    <string name="bpm_target_field_hint">BPM</string>
+    <string name="bpm_target_hint">The speed shifter plays the music at this tempo and follows new tracks once their tempo is detected. It can only slow down, so a target faster than the music plays at 1.00\u00d7.</string>
+    <string name="bpm_target_set">Set</string>
+    <string name="bpm_target_off">Off</string>
+    <string name="bpm_target_invalid">Enter a tempo from %1$d to %2$d BPM</string>
     <string name="bpm_range">Tempo range</string>
     <string name="bpm_size">Display size</string>
     <string name="bpm_lcd_buttons">LCD-style floating buttons</string>

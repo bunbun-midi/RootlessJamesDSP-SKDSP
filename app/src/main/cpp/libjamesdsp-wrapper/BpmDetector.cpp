@@ -35,7 +35,7 @@ void BpmDetector::reset() {
     std::fill(prevLogMag.begin(), prevLogMag.end(), 0.0f);
     std::fill(onset.begin(), onset.end(), 0.0f);
     decimAcc = 0.0f; decimCount = 0; frameWrite = 0; hopCounter = 0;
-    onsetWrite = 0; onsetCount = 0; framesSinceEstimate = 0;
+    onsetWrite = 0; onsetCount = 0; framesSinceEstimate = 0; stableFrames = 0;
     current = 0.0f; candidate = 0.0f; candidateVotes = 0;
     bpmOut.store(0.0f);
     confidenceOut.store(0.0f);
@@ -97,11 +97,88 @@ void BpmDetector::analyzeFrame() {
     onset[onsetWrite] = flux;
     onsetWrite = (onsetWrite + 1) & (kOnsetFrames - 1);
     if (onsetCount < kOnsetFrames) onsetCount++;
+    if (stableFrames < kOnsetFrames) stableFrames++;
 
     if (++framesSinceEstimate >= (int)frameRate) {
         framesSinceEstimate = 0;
         estimateTempo();
     }
+}
+
+double BpmDetector::detrend(int n) {
+    /* Subtract a moving average (~0.25 s), keep the positive part */
+    const int start = (onsetWrite - n) & (kOnsetFrames - 1);
+    const int avgHalf = std::max(1, (int)(0.125f * frameRate));
+    double energy = 0.0;
+    /* running sum over [i - avgHalf, i + avgHalf] */
+    double sum = 0.0;
+    int lo = 0, hi = -1;
+    for (int i = 0; i < n; i++) {
+        while (hi < std::min(n - 1, i + avgHalf))
+            sum += onset[(start + ++hi) & (kOnsetFrames - 1)];
+        while (lo < i - avgHalf)
+            sum -= onset[(start + lo++) & (kOnsetFrames - 1)];
+        const float v = onset[(start + i) & (kOnsetFrames - 1)] - (float)(sum / (hi - lo + 1));
+        work[i] = v > 0.0f ? v : 0.0f;
+        energy += (double)work[i] * work[i];
+    }
+    return energy;
+}
+
+/*
+ * Precise beat period: the autocorrelation of a steady beat peaks at every multiple k of the
+ * period, and the position of the k-th peak divided by k is k times less affected by the frame
+ * grid. Peaks are tracked outward (each one searched around k x the estimate so far), over up to
+ * ~20 s of audio since the tempo last changed, keeping at least 4 s of overlap; the period is the
+ * least-squares fit through all peaks. Falls back to `lag` if fewer than two peaks are clear.
+ * Leaves `work` holding the detrended onsets of the refinement window.
+ */
+float BpmDetector::refineLag(float lag, int minLag, int maxLag) {
+    const int coarseN = std::min(onsetCount, (int)(8.0f * frameRate));
+    const int m = std::max(coarseN, std::min({stableFrames, onsetCount, kOnsetFrames - 1, (int)(20.0f * frameRate)}));
+    if (m != coarseN && detrend(m) < 1e-6)
+        return lag;
+    const int minOverlap = (int)(4.0f * frameRate);
+    auto r = [&](int l) {
+        double s = 0.0;
+        for (int i = l; i < m; i++)
+            s += (double)work[i] * work[i - l];
+        return s / (m - l);
+    };
+    const int l0 = (int)std::lround(lag);
+    const double ref = r(l0);
+    if (ref <= 0.0)
+        return lag;
+
+    double est = lag, sumKP = 0.0, sumKK = 0.0;
+    int peaks = 0;
+    for (int k = 1;; k++) {
+        const double center = k * est;
+        const int c = (int)std::lround(center);
+        if (c + 3 > m - minOverlap)
+            break;
+        /* strongest integer lag within +-2 of the expected position, must be a local maximum */
+        double v[7];
+        for (int d = -3; d <= 3; d++)
+            v[d + 3] = r(c + d);
+        int best = 1;
+        for (int d = 2; d <= 5; d++)
+            if (v[d] > v[best]) best = d;
+        if (!(v[best] > v[best - 1] && v[best] >= v[best + 1]) || v[best] < 0.25 * ref)
+            continue; /* no clear peak at this multiple (e.g. a missing beat): skip it */
+        double p = c + best - 3;
+        const double denom = v[best - 1] - 2.0 * v[best] + v[best + 1];
+        if (denom < 0.0)
+            p += std::clamp(0.5 * (v[best - 1] - v[best + 1]) / denom, -0.5, 0.5);
+        sumKP += k * p;
+        sumKK += (double)k * k;
+        peaks++;
+        est = sumKP / sumKK;
+    }
+    /* the coarse peak wanders by a frame or two with uneven playing; further away is another tempo */
+    if (peaks < 2 || est < minLag - 0.5 || est > maxLag + 0.5 || std::fabs(est - lag) > 2.5)
+        return lag;
+    return (float)est;
 }
 
 void BpmDetector::estimateTempo() {
@@ -111,23 +188,10 @@ void BpmDetector::estimateTempo() {
     if (n < (int)(4.0f * frameRate) || 2 * maxLag + 2 >= n)
         return;
 
-    /* Detrend: subtract a moving average (~0.25 s), keep positive part */
-    const int start = (onsetWrite - n) & (kOnsetFrames - 1);
-    const int avgHalf = std::max(1, (int)(0.125f * frameRate));
-    double energy = 0.0;
-    for (int i = 0; i < n; i++) {
-        float sum = 0.0f;
-        int cnt = 0;
-        for (int j = std::max(0, i - avgHalf); j <= std::min(n - 1, i + avgHalf); j++) {
-            sum += onset[(start + j) & (kOnsetFrames - 1)];
-            cnt++;
-        }
-        const float v = onset[(start + i) & (kOnsetFrames - 1)] - sum / cnt;
-        work[i] = v > 0.0f ? v : 0.0f;
-        energy += (double)work[i] * work[i];
-    }
+    const double energy = detrend(n);
     if (energy < 1e-6) {
         /* silence */
+        stableFrames = 0;
         current = 0.0f;
         bpmOut.store(0.0f);
         confidenceOut.store(0.0f);
@@ -183,6 +247,7 @@ void BpmDetector::estimateTempo() {
         if (denom < 0.0f)
             lag += std::clamp(0.5f * (a - c) / denom, -0.5f, 0.5f);
     }
+    lag = refineLag(lag, minLag, maxLag);
     float estimate = 60.0f * frameRate / lag;
 
     const float conf = std::clamp((float)(bestScore / (scoreSum / scoreCount) - 1.0f) / 3.0f, 0.0f, 1.0f);
@@ -197,6 +262,8 @@ void BpmDetector::estimateTempo() {
         if (++candidateVotes >= 2) {
             current = estimate;
             candidateVotes = 0;
+            /* a new tempo: only the last ~4 s are known to belong to it */
+            stableFrames = std::min(stableFrames, (int)(4.0f * frameRate));
         }
         candidate = estimate;
     } else {

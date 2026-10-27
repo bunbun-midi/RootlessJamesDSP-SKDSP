@@ -23,8 +23,8 @@ import kotlin.math.roundToInt
  * Floating four-octave piano keyboard that sets the pitch shifter's interval:
  *  - top row:    C = -12 st ... middle C = 0 ... C = +12 st
  *  - bottom row: C = -24 st ... B = -13 st, middle C = +12 st ... C = +24 st
- * The header holds a drag handle, the current interval, the portamento slider and a minimize
- * button. Minimized, the keyboard is a small square where the minimize button was; tapping it
+ * The header holds drag handles at both ends, the current interval, the portamento slider and a
+ * minimize button. Minimized, the keyboard is a small square where the minimize button was; tapping it
  * brings the keyboard back (dragging moves it).
  */
 class KeyboardPanel(context: Context) :
@@ -60,13 +60,16 @@ class KeyboardPanel(context: Context) :
 
         // Header: drag handle | interval | portamento slider + value | close
         val onSurface = color(com.google.android.material.R.attr.colorOnSurface)
-        val handle = ImageView(ctx).apply {
+        // Drag handles at both ends of the title bar (left, and right next to the minimize button)
+        fun dragHandle() = ImageView(ctx).apply {
             setImageResource(R.drawable.ic_baseline_drag_handle_24dp)
             imageTintList = ColorStateList.valueOf(onSurface)
             setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
             contentDescription = ctx.getString(R.string.keyboard_move)
+            makeDraggable(this)
         }
-        makeDraggable(handle)
+        val handle = dragHandle()
+        val handleRight = dragHandle()
 
         intervalText = TextView(ctx).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
@@ -120,7 +123,8 @@ class KeyboardPanel(context: Context) :
                 marginEnd = -dp(8f)
             })
             addView(portamentoText)
-            addView(close, LinearLayout.LayoutParams(iconSize, iconSize).apply { marginStart = dp(4f) })
+            addView(handleRight, LinearLayout.LayoutParams(iconSize, iconSize).apply { marginStart = dp(4f) })
+            addView(close, LinearLayout.LayoutParams(iconSize, iconSize).apply { marginStart = dp(2f) })
         }
 
         val content = LinearLayout(ctx).apply {
