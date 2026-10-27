@@ -56,4 +56,4 @@
     <!-- Script editor -->
     <integer name="default_editor_font_size" translatable="false" tools:keep="@integer/default_editor_font_size">13</integer>
 
-</resources>
+</resources>

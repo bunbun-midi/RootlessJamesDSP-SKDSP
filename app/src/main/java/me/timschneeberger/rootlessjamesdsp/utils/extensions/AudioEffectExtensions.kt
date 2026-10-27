@@ -138,4 +138,4 @@ object AudioEffectExtensions {
     private const val MAX_IR_PARTITION_SIZE = 4096
     private const val PARAM_CHAR_BUFFER_INFO = 8888
     private const val PARAM_FLOAT_BUFFER_INFO = 9999
-}
+}

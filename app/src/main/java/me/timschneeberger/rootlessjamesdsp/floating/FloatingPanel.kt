@@ -128,7 +128,7 @@ abstract class FloatingPanel(
      * movement calls [onTap] (if given).
      */
     @SuppressLint("ClickableViewAccessibility")
-    protected fun makeDraggable(handle: View, onTap: (() -> Unit)? = null, saveKey: String = positionKey) {
+    protected fun makeDraggable(handle: View, saveKey: String = positionKey, onTap: (() -> Unit)? = null) {
         var downX = 0f
         var downY = 0f
         var startX = 0

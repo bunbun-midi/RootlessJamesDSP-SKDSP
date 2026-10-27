@@ -314,4 +314,4 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
         lateinit var instance: MainApplication
             private set
     }
-}
+}

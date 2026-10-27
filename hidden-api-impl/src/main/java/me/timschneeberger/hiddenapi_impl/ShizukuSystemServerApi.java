@@ -174,4 +174,4 @@ public class ShizukuSystemServerApi {
             Log.d("ShizukuSystemServerApi", ex.toString());
         }
     }
-}
+}

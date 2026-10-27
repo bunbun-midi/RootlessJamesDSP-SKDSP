@@ -28,4 +28,4 @@ public abstract class Singleton<T> {
             throw new NullPointerException();
         return instance;
     }
-}
+}

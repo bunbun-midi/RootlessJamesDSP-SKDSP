@@ -27,4 +27,6 @@ android {
 dependencies {
     implementation("dev.rikka.shizuku:api:${AndroidConfig.shizukuVersion}")
     compileOnly(project(":hidden-api-stubs"))
-}
+    // Annotations referenced by Shizuku's classes; same version Shizuku brings in at runtime
+    compileOnly("androidx.annotation:annotation:1.3.0")
+}
