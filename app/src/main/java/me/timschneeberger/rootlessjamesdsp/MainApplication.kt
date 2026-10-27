@@ -31,6 +31,7 @@ import me.timschneeberger.rootlessjamesdsp.service.RootAudioProcessorService
 import me.timschneeberger.rootlessjamesdsp.session.dump.DumpManager
 import me.timschneeberger.rootlessjamesdsp.session.root.RootSessionDatabase
 import me.timschneeberger.rootlessjamesdsp.utils.Constants
+import me.timschneeberger.rootlessjamesdsp.power.PowerBubbleManager
 import me.timschneeberger.rootlessjamesdsp.utils.ProfileManager
 import me.timschneeberger.rootlessjamesdsp.utils.RoutingObserver
 import me.timschneeberger.rootlessjamesdsp.utils.extensions.ContextExtensions.registerLocalReceiver
@@ -203,6 +204,9 @@ open class MainApplication : Application(), SharedPreferences.OnSharedPreference
             addAction(Constants.ACTION_REPORT_SAMPLE_RATE)
             addAction(Constants.ACTION_DISCARD_AUTHORIZATION)
         })
+
+        // Floating power button (if enabled); lives as long as the app process
+        PowerBubbleManager.init(this)
 
         try {
             if (isRoot() && isLegacyMode)

@@ -64,8 +64,13 @@ object RecorderController {
         if (seconds < 3600) String.format(Locale.getDefault(), "%d:%02d", seconds / 60, seconds % 60)
         else String.format(Locale.getDefault(), "%d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60)
 
+    /** Recorder A settings (and the floating button's position) */
     fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(Constants.PREF_RECORDER, Context.MODE_PRIVATE)
+
+    /** Recorder B settings (same keys as A) */
+    fun prefsB(context: Context): SharedPreferences =
+        context.getSharedPreferences(Constants.PREF_RECORDER_B, Context.MODE_PRIVATE)
 
     private fun notifyListeners() {
         if (Looper.myLooper() == Looper.getMainLooper())

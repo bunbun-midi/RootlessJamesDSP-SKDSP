@@ -15,7 +15,6 @@ import com.google.android.material.color.MaterialColors
 import com.google.android.material.slider.Slider
 import me.timschneeberger.rootlessjamesdsp.R
 import me.timschneeberger.rootlessjamesdsp.floating.FloatingPanel
-import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -57,16 +56,16 @@ class KeyboardPanel(context: Context) :
         val handle = ImageView(ctx).apply {
             setImageResource(R.drawable.ic_baseline_drag_handle_24dp)
             imageTintList = ColorStateList.valueOf(onSurface)
-            setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
+            setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
             contentDescription = ctx.getString(R.string.keyboard_move)
         }
         makeDraggable(handle)
 
         intervalText = TextView(ctx).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             setTextColor(onSurface)
-            minWidth = dp(64f)
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2f), 0, dp(10f), 0)
         }
         val portamentoLabel = TextView(ctx).apply {
             text = ctx.getString(R.string.keyboard_portamento_short)
@@ -86,16 +85,16 @@ class KeyboardPanel(context: Context) :
             }
         }
         portamentoText = TextView(ctx).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
             setTextColor(onSurface)
-            minWidth = dp(56f)
+            minWidth = dp(26f)
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
         }
         updatePortamentoText(slider.value)
         val close = ImageView(ctx).apply {
             setImageResource(R.drawable.ic_close_24dp)
             imageTintList = ColorStateList.valueOf(onSurface)
-            setPadding(dp(8f), dp(8f), dp(8f), dp(8f))
+            setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
             contentDescription = ctx.getString(R.string.keyboard_close)
             setOnClickListener {
                 // Turning the setting off makes the service remove the keyboard
@@ -104,21 +103,27 @@ class KeyboardPanel(context: Context) :
             }
         }
 
+        // Thin title bar: icons 28 dp, slider centered in a 32 dp row (the slider's own 48 dp touch
+        // height is clipped). Negative slider margins remove the slider's built-in side padding.
+        val iconSize = dp(28f)
         val header = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(handle)
+            addView(handle, LinearLayout.LayoutParams(iconSize, iconSize))
             addView(intervalText)
             addView(portamentoLabel)
-            addView(slider, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(slider, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = -dp(10f)
+                marginEnd = -dp(8f)
+            })
             addView(portamentoText)
-            addView(close)
+            addView(close, LinearLayout.LayoutParams(iconSize, iconSize).apply { marginStart = dp(4f) })
         }
 
         val content = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(6f), dp(2f), dp(6f), dp(8f))
-            addView(header)
+            addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(HEADER_HEIGHT_DP)))
             addView(topRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(ROW_HEIGHT_DP)))
             addView(bottomRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(ROW_HEIGHT_DP)).apply {
                 topMargin = dp(6f)
@@ -166,11 +171,12 @@ class KeyboardPanel(context: Context) :
     private fun onKey(semitones: Int) = KeyboardController.play(semitones)
 
     private fun updatePortamentoText(ms: Float) {
-        portamentoText.text = String.format(Locale.getDefault(), "%d ms", ms.roundToInt())
+        portamentoText.text = ms.roundToInt().toString()
     }
 
     companion object {
         private const val WIDTH_FRACTION = 0.9f
         private const val ROW_HEIGHT_DP = 84f
+        private const val HEADER_HEIGHT_DP = 32f
     }
 }

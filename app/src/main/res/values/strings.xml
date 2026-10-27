@@ -759,8 +759,10 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="speed_shift_behind">%1$s behind</string>
 
     <!-- Recorder -->
-    <string name="recorder_title">Recorder</string>
-    <string name="recorder_summary">Shows a floating record button while audio processing is on. Records to Music/SK DSP. As the last block in the effect order it records exactly what you hear; placed earlier, it records the audio at that point with the output gain and limiter applied.</string>
+    <string name="recorder_title">Recorder A</string>
+    <string name="recorder_summary">Shows a floating record button while audio processing is on. Records to Music/SK DSP (file names end in A). As the last block in the effect order it records exactly what you hear; placed earlier, it records the audio at that point with the output gain and limiter applied.</string>
+    <string name="recorder_b_title">Recorder B</string>
+    <string name="recorder_b_summary">A second recorder for another point in the effect order (by default first, i.e. the dry signal). Shares the floating record button with Recorder A: both start and stop on the same audio block. File names end in B.</string>
     <string name="recorder_format">Format</string>
     <string name="recorder_format_pcm16">WAV, 16-bit</string>
     <string name="recorder_format_float">WAV, 32-bit float (no clipping)</string>
@@ -772,6 +774,15 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="recorder_quality">Quality (0 smallest, 10 best)</string>
     <string name="recorder_bitrate">Bitrate</string>
     <string name="recorder_bitrate_unit">\u0020kbps</string>
+
+    <!-- Floating power button -->
+    <string name="power_bubble_title">Floating power button</string>
+    <string name="power_bubble_summary">Floating button that turns audio processing on and off, like the power button and the quick settings tile. Tap to toggle, long-press and drag to move it.</string>
+    <string name="power_bubble_on">ON</string>
+    <string name="power_bubble_off">OFF</string>
+    <string name="power_bubble_on_desc">Audio processing on. Tap to turn off</string>
+    <string name="power_bubble_off_desc">Audio processing off. Tap to turn on</string>
+    <string name="power_bubble_permission_required">Allow \"Display over other apps\" to show the floating power button</string>
 
     <!-- BPM display -->
     <string name="bpm_display_title">BPM display</string>
@@ -791,7 +802,7 @@ Please press \'Continue\' below to re-do the setup wizard.</string>
     <string name="keyboard_target">Controls</string>
     <string name="keyboard_target_standard">Pitch shifter (low latency)</string>
     <string name="keyboard_target_hq">Pitch Shifter HQ</string>
-    <string name="keyboard_target_standard_short">Pitch shifter</string>
+    <string name="keyboard_target_standard_short">Shifter</string>
     <string name="keyboard_target_hq_short">HQ</string>
     <string name="keyboard_portamento">Portamento</string>
     <string name="keyboard_portamento_short">Glide</string>

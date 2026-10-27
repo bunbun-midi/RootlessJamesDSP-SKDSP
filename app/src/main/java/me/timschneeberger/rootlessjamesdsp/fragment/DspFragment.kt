@@ -90,11 +90,19 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
                     R.xml.dsp_pitch_hq_preferences
                 ))
             .replace(
+                R.id.card_power_bubble, PreferenceGroupFragment.newInstance(Constants.PREF_POWER,
+                    R.xml.power_preferences
+                ))
+            .replace(
                 R.id.card_speed_shift, PreferenceGroupFragment.newInstance(Constants.PREF_SPEED_SHIFT,
                     R.xml.speed_shift_preferences
                 ))
             .replace(
                 R.id.card_recorder, PreferenceGroupFragment.newInstance(Constants.PREF_RECORDER,
+                    R.xml.recorder_preferences
+                ))
+            .replace(
+                R.id.card_recorder_b, PreferenceGroupFragment.newInstance(Constants.PREF_RECORDER_B,
                     R.xml.recorder_preferences
                 ))
             .replace(
@@ -166,6 +174,7 @@ class DspFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListen
         binding.cardPitchHqWrapper.isVisible = isRootless()
         binding.cardSpeedShiftWrapper.isVisible = isRootless()
         binding.cardRecorderWrapper.isVisible = isRootless()
+        binding.cardRecorderBWrapper.isVisible = isRootless()
         binding.cardBpmWrapper.isVisible = isRootless()
         binding.cardKeyboardWrapper.isVisible = isRootless()
 

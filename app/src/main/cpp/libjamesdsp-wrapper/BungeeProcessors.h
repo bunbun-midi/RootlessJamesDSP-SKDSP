@@ -25,6 +25,7 @@
 namespace chain {
 
 struct BungeeStream; /* opaque; wraps Bungee::Stretcher + Bungee::Stream */
+struct SpeedStream;  /* opaque; wraps Bungee::Stretcher + a low-latency stream */
 
 class BungeePitchShifter {
 public:
@@ -80,6 +81,16 @@ public:
     void requestReset() { resetRequested.store(true); }
     int64_t backlogFrames() const { return backlog.load(); }
 
+    /* Audio thread, before the first process(): `history` is the audio captured just before
+     * switching on and `current` the block about to be processed (interleaved stereo). Fills the
+     * stretcher so its output starts without a gap and aligns it for a dry -> shifted splice of
+     * `spliceFrames` frames at the start of `current`. Returns the alignment delay in frames. */
+    int prime(const float* history, int historyFrames, const float* current, int currentFrames, int spliceFrames);
+
+    /* Audio needed in `history` for prime(): stretcher delay (~3.6 k frames) + alignment range */
+    static constexpr int kPrimeFrames = 8192;
+    static constexpr int kMaxAlignFrames = 960; /* 20 ms at 48 kHz */
+
     /* Audio thread: consumes `frames` captured frames and renders `frames` output frames */
     void process(const float* inInterleaved, float* outInterleaved, int frames);
 
@@ -89,14 +100,15 @@ public:
 
 private:
     void reset();
+    void feedDiscarding(const float* in, int frames);
 
     const int sampleRate;
     std::atomic<float> targetSpeed{1.0f};
-    std::atomic<bool> resetRequested{true};
+    std::atomic<bool> resetRequested{false}; /* the constructor already builds a fresh stream */
     std::atomic<int64_t> backlog{0};
 
     ChunkedFifo fifo;
-    std::unique_ptr<BungeeStream> stream;
+    std::unique_ptr<SpeedStream> stream;
     double fraction = 0.0;
     std::vector<float> inL, inR, outL, outR;
 };

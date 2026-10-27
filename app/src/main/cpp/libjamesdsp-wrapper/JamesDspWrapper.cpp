@@ -461,12 +461,14 @@ Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setPitchShiftGl
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
-Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setRecorderTap(JNIEnv *env, jobject obj, jlong self, jlong tapHandle)
+Java_me_timschneeberger_rootlessjamesdsp_interop_JamesDspWrapper_setRecorderTaps(JNIEnv *env, jobject obj, jlong self, jlong tapA, jlong tapB)
 {
     // Taking the wrapper lock guarantees the audio thread is not inside the chain while the
-    // pointer changes, so the previous tap can be drained and freed once this returns.
+    // pointers change: both recorders start (and stop) at the same audio block, and detached taps
+    // can be drained and freed once this returns.
     DECLARE_DSP_B
-    wrapper->chain.recorder = reinterpret_cast<chain::RecorderTap*>(tapHandle);
+    wrapper->chain.recorder = reinterpret_cast<chain::RecorderTap*>(tapA);
+    wrapper->chain.recorderB = reinterpret_cast<chain::RecorderTap*>(tapB);
     return true;
 }
 

@@ -5,6 +5,7 @@
 #include <bungee/Bungee.h>
 #include <bungee/Stream.h>
 
+#include "BungeeLowLatencyStream.h"
 #include "BungeeProcessors.h"
 
 namespace chain {
@@ -19,6 +20,20 @@ struct BungeeStream {
     explicit BungeeStream(int sampleRate) :
         stretcher({sampleRate, sampleRate}, 2, 0),
         stream(stretcher, kMaxBlockFrames, 2) {}
+};
+
+/* Speed shifter stream (pitch 1): grains only need +-2048 input frames around their position
+ * (measured with Bungee::Basic at hop adjust 0), so it runs with that look-ahead instead of the
+ * pitch-shift worst case. Output delay ~2.6 k frames (~55 ms at 48 kHz) instead of ~9.7 k. */
+static constexpr int kSpeedLookahead = 2050;
+
+struct SpeedStream {
+    Bungee::Stretcher<Bungee::Basic> stretcher; /* must be constructed before `stream` */
+    Bungee::SkDsp::LowLatencyStream<Bungee::Basic> stream;
+
+    explicit SpeedStream(int sampleRate) :
+        stretcher({sampleRate, sampleRate}, 2, 0),
+        stream(stretcher, kMaxBlockFrames, 2, kSpeedLookahead) {}
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -159,7 +174,7 @@ void ChunkedFifo::clear() {
 SpeedShifter::SpeedShifter(int sampleRate) :
     sampleRate(sampleRate),
     fifo(sampleRate) {
-    stream = std::make_unique<BungeeStream>(sampleRate);
+    stream = std::make_unique<SpeedStream>(sampleRate);
     inL.assign(kMaxBlockFrames, 0.0f);
     inR.assign(kMaxBlockFrames, 0.0f);
     outL.assign(kMaxBlockFrames, 0.0f);
@@ -171,8 +186,75 @@ SpeedShifter::~SpeedShifter() = default;
 void SpeedShifter::reset() {
     fifo.clear();
     fraction = 0.0;
-    stream = std::make_unique<BungeeStream>(sampleRate);
+    stream = std::make_unique<SpeedStream>(sampleRate);
     backlog.store(0);
+}
+
+void SpeedShifter::feedDiscarding(const float* in, int frames) {
+    for (int off = 0; off < frames;) {
+        const int n = std::min(frames - off, kMaxBlockFrames);
+        for (int i = 0; i < n; i++) {
+            inL[i] = in[2 * (off + i)];
+            inR[i] = in[2 * (off + i) + 1];
+        }
+        const float* inPtr[2] = {inL.data(), inR.data()};
+        float* outPtr[2] = {outL.data(), outR.data()};
+        stream->stream.process(inPtr, outPtr, n, (double)n, 1.0);
+        off += n;
+    }
+}
+
+int SpeedShifter::prime(const float* history, int historyFrames, const float* current, int currentFrames,
+                        int spliceFrames) {
+    if (resetRequested.exchange(false))
+        reset();
+
+    /*
+     * Run the audio captured before switching on through the stretcher at speed 1 (output
+     * discarded), so the first real block comes out as audio instead of silence. The shifted
+     * audio then lags the captured audio by the stretcher delay D, i.e. switching on replays the
+     * last D frames. Crossfading from the dry signal to a copy that is D frames older partly
+     * cancels on tonal music, so up to kMaxAlignFrames of extra delay are added (kept in the
+     * backlog), chosen so that both copies match best over the splice (as in WSOLA).
+     */
+    const int maxAlign = std::min(kMaxAlignFrames, historyFrames);
+    feedDiscarding(history, historyFrames - maxAlign);
+    const int delay = (int)std::lround(stream->stream.latency());
+
+    // Audio at frame i relative to the start of `current` (negative = history), interleaved stereo.
+    // Both channels are compared separately (a mono mix cancels out-of-phase content).
+    auto frame = [&](int i) {
+        return i < 0 ? history + 2 * (historyFrames + i) : current + 2 * i;
+    };
+    const int n = std::clamp(spliceFrames, 1, currentFrames);
+    int extra = 0;
+    if (delay + maxAlign + 1 <= historyFrames) {
+        double ee = 0.0;
+        for (int i = 0; i < n; i++) {
+            const float* d = frame(i);
+            ee += (double)d[0] * d[0] + (double)d[1] * d[1];
+        }
+        double best = -2.0;
+        for (int e = 0; e <= maxAlign; e++) {
+            double c = 0.0, ww = 0.0;
+            for (int i = 0; i < n; i++) {
+                const float* d = frame(i);
+                const float* w = frame(i - delay - e);
+                c += (double)d[0] * w[0] + (double)d[1] * w[1];
+                ww += (double)w[0] * w[0] + (double)w[1] * w[1];
+            }
+            const double r = ee > 1e-12 && ww > 1e-12 ? c / std::sqrt(ee * ww) : 0.0;
+            if (r > best + 1e-9) {
+                best = r;
+                extra = e;
+            }
+        }
+    }
+
+    feedDiscarding(history + 2 * (historyFrames - maxAlign), maxAlign - extra);
+    fifo.push(history + 2 * (historyFrames - extra), extra);
+    backlog.store(fifo.size());
+    return extra;
 }
 
 void SpeedShifter::process(const float* in, float* out, int frames) {

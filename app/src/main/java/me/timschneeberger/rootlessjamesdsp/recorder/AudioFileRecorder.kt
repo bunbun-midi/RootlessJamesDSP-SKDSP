@@ -17,9 +17,6 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Records the audio delivered by the "Recorder" effect block into Music/SK DSP
@@ -31,8 +28,13 @@ import java.util.Locale
  * @param variableBitrate MP3/Ogg: quality-based VBR (true) or fixed/average bitrate (false)
  * @param quality MP3/Ogg VBR quality, 0 (smallest) .. 10 (best)
  * @param bitrateKbps MP3 constant / Ogg average bitrate
- * @param attachTap attaches (handle) or detaches (0) the tap to/from the effect chain
+ * @param requestStop called on the main thread if the recording has to end (size limit, I/O error);
+ *        the owner then detaches the tap and calls [finish]
  * @param onFinished called on the main thread once the file is complete (or failed)
+ *
+ * Lifecycle (lets several recorders start/stop on exactly the same audio block):
+ * [prepare] -> attach [tapHandle] to the effect chain -> [begin] -> detach -> [finish].
+ * If attaching fails after [prepare], call [abort].
  */
 @RequiresApi(Build.VERSION_CODES.Q)
 class AudioFileRecorder(
@@ -42,7 +44,8 @@ class AudioFileRecorder(
     private val variableBitrate: Boolean,
     private val quality: Int,
     private val bitrateKbps: Int,
-    private val attachTap: (Long) -> Boolean,
+    baseName: String,
+    private val requestStop: () -> Unit,
     private val onFinished: (AudioFileRecorder, Result) -> Unit,
 ) {
     enum class Format(val value: String, val extension: String, val mimeType: String, val codec: Int) {
@@ -63,8 +66,7 @@ class AudioFileRecorder(
         data class Failed(val message: String) : Result()
     }
 
-    val fileName: String = "SK DSP " +
-            SimpleDateFormat("yyyy-MM-dd HH-mm-ss", Locale.US).format(Date()) + "." + format.extension
+    val fileName: String = baseName + "." + format.extension
 
     // WAV only
     private val floatWav = format == Format.WAV_FLOAT
@@ -81,8 +83,12 @@ class AudioFileRecorder(
     @Volatile
     private var stopRequested = false
 
-    /** @throws Exception if the file, the encoder or the tap could not be created */
-    fun start() {
+    /** Native tap to attach to the effect chain (valid between [prepare] and the end of recording) */
+    val tapHandle: Long
+        get() = tap
+
+    /** Creates the encoder, the tap and the file. @throws Exception on failure (nothing is left behind) */
+    fun prepare() {
         try {
             if (!format.isWav) {
                 encoder = AudioEncoder.nativeCreate(format.codec, sampleRate, variableBitrate, quality, bitrateKbps)
@@ -107,30 +113,33 @@ class AudioFileRecorder(
             val pfd = resolver.openFileDescriptor(newUri, "rw") ?: throw IOException("Cannot open $fileName")
             stream = ParcelFileDescriptor.AutoCloseOutputStream(pfd)
             channel = stream!!.channel.also { if (format.isWav) writeFully(it, wavHeader(0), 0) }
-
-            if (!attachTap(tap))
-                throw IOException("Audio engine not ready")
         } catch (ex: Exception) {
-            closeFile(success = false)
-            releaseNative()
+            abort()
             throw ex
         }
+    }
 
+    /** Starts writing; call once the tap is attached */
+    fun begin() {
         thread = Thread({ writerLoop() }, "AudioFileRecorder").also { it.start() }
     }
 
-    /** Stops recording; the file is completed asynchronously ([onFinished]) */
-    fun stop() {
-        if (stopRequested)
-            return
-        // Detach first: once this returns, the audio thread no longer writes into the tap
-        attachTap(0)
+    /** Prepared but never started: deletes the file and frees everything */
+    fun abort() {
+        closeFile(success = false)
+        releaseNative()
+    }
+
+    /**
+     * Ends the recording; call only after the tap was detached from the effect chain (the audio
+     * thread must no longer write into it). The file is completed asynchronously ([onFinished]).
+     */
+    fun finish() {
         stopRequested = true
     }
 
-    /** Stops and waits until the file is complete (service shutdown) */
-    fun stopBlocking(timeoutMs: Long) {
-        stop()
+    /** Waits until the file is complete (service shutdown) */
+    fun awaitFinished(timeoutMs: Long) {
         try {
             thread?.join(timeoutMs)
         } catch (ex: InterruptedException) {
@@ -145,15 +154,17 @@ class AudioFileRecorder(
         var position = if (format.isWav) wavHeader(0).capacity().toLong() else 0L
         var dataBytes = 0L
         var error: Exception? = null
+        var stopAsked = false
 
-        try {
-            while (true) {
-                // Read the flag before draining: after stop() the tap is detached, so one
-                // complete drain afterwards collects everything that was recorded
-                val finishing = stopRequested
-                do {
-                    val frames = RecorderTap.nativeRead(tap, floats)
-                    if (frames > 0) {
+        while (true) {
+            // Read the flag before draining: after finish() the tap is detached, so one
+            // complete drain afterwards collects everything that was recorded
+            val finishing = stopRequested
+            do {
+                val frames = RecorderTap.nativeRead(tap, floats)
+                // After an error the audio is still drained (and dropped) until the owner stops us
+                if (frames > 0 && error == null) {
+                    try {
                         val written = if (format.isWav) {
                             wavBytes.clear()
                             if (floatWav) {
@@ -172,26 +183,32 @@ class AudioFileRecorder(
                         }
                         position += written
                         dataBytes += written
+                    } catch (ex: Exception) {
+                        Timber.e("Recording failed")
+                        Timber.e(ex)
+                        error = ex
                     }
-                } while (frames == BLOCK_FRAMES)
-
-                if (finishing)
-                    break
-
-                // WAV files can't be larger than 4 GB
-                if (format.isWav && dataBytes >= MAX_WAV_DATA_BYTES) {
-                    Timber.w("WAV size limit reached; stopping")
-                    stop()
-                    continue
                 }
+            } while (frames == BLOCK_FRAMES)
 
-                try {
-                    Thread.sleep(POLL_MS)
-                } catch (ex: InterruptedException) {
-                    // keep going until stop() was called
-                }
+            if (finishing)
+                break
+
+            // WAV files can't be larger than 4 GB; errors end the recording too
+            if (!stopAsked && (error != null || (format.isWav && dataBytes >= MAX_WAV_DATA_BYTES))) {
+                Timber.w("Recording has to end (error or WAV size limit)")
+                stopAsked = true
+                Handler(Looper.getMainLooper()).post { requestStop() }
             }
 
+            try {
+                Thread.sleep(POLL_MS)
+            } catch (ex: InterruptedException) {
+                // keep going until finish() was called
+            }
+        }
+
+        if (error == null) try {
             if (format.isWav) {
                 writeFully(channel, wavHeader(dataBytes), 0)
             } else {
@@ -203,11 +220,9 @@ class AudioFileRecorder(
                 }
             }
         } catch (ex: Exception) {
-            Timber.e("Recording failed")
+            Timber.e("Finishing the recording failed")
             Timber.e(ex)
             error = ex
-            attachTap(0)
-            stopRequested = true
         }
 
         val dropped = if (tap != 0L) RecorderTap.nativeDroppedFrames(tap) else 0L

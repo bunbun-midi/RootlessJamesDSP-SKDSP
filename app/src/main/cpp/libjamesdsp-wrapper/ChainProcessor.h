@@ -12,7 +12,7 @@
  *  - a wet/dry mix for the convolver
  *  - a phase-vocoder pitch shifter (PitchShifter.cpp)
  *  - "Pitch Shifter HQ" based on Bungee (BungeeProcessors.cpp)
- *  - a recorder tap that copies the audio at its position to a WAV writer (RecorderTap.cpp)
+ *  - two recorder taps (A and B) that copy the audio at their positions to file writers (RecorderTap.cpp)
  *
  * Everything in here is called while the wrapper mutex is held (see JamesDspWrapper.cpp),
  * so parameter setters and the audio thread never run concurrently.
@@ -54,8 +54,9 @@ enum EffectId : int {
     COMPRESSOR = 11,
     PITCH_SHIFT = 12,
     PITCH_SHIFT_HQ = 13, /* Bungee */
-    RECORDER = 14,
-    COUNT = 15
+    RECORDER = 14,   /* Recorder A */
+    RECORDER_B = 15,
+    COUNT = 16
 };
 
 /* Stereo-linked, feed-forward, log-domain compressor with soft knee
@@ -138,7 +139,8 @@ struct State {
     PitchShifter pitchShifter;
     BungeePitchShifter pitchShifterHq;
     PitchGlide pitchGlide, pitchGlideHq;
-    RecorderTap* recorder = nullptr; /* not owned; see RecorderTap.h */
+    RecorderTap* recorder = nullptr;  /* Recorder A; not owned, see RecorderTap.h */
+    RecorderTap* recorderB = nullptr; /* Recorder B */
     bool benchmarkHandled = false;
 };
 

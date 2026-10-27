@@ -151,6 +151,7 @@
     <string name="key_bpm_range" translatable="false">bpm_range</string>
 
     <string name="key_keyboard_enable" translatable="false">keyboard_enable</string>
+    <string name="key_power_bubble_enable" translatable="false">power_bubble_enable</string>
     <string name="key_keyboard_target" translatable="false">keyboard_target</string>
     <string name="key_keyboard_portamento" translatable="false">keyboard_portamento</string>
 

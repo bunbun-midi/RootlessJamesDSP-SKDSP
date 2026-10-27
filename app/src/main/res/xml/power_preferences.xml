@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <me.timschneeberger.rootlessjamesdsp.preference.SwitchPreferenceGroup
+        android:key="@string/key_power_bubble_enable"
+        android:title="@string/power_bubble_title"
+        android:summary="@string/power_bubble_summary"
+        android:icon="@drawable/ic_twotone_power_settings_24dp"
+        app:iconSpaceReserved="false" />
+</PreferenceScreen>

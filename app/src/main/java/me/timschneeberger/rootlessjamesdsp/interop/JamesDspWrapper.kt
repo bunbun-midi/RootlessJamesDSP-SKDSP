@@ -47,8 +47,8 @@ object JamesDspWrapper {
     external fun setConvolverMix(self: JamesDspHandle, wet: Float): Boolean
     external fun setPitchShift(self: JamesDspHandle, enable: Boolean, semitones: Float): Boolean
     external fun setPitchShiftHq(self: JamesDspHandle, enable: Boolean, semitones: Float): Boolean
-    /** Attaches a [RecorderTap] handle to the "Recorder" effect block (0 = detach) */
-    external fun setRecorderTap(self: JamesDspHandle, tap: Long): Boolean
+    /** Attaches [RecorderTap] handles to the Recorder A / B effect blocks (0 = detach), atomically */
+    external fun setRecorderTaps(self: JamesDspHandle, tapA: Long, tapB: Long): Boolean
     /** Floating keyboard: enables the (HQ) pitch shifter and glides to [semitones] in [glideMs] */
     external fun setPitchShiftGlide(self: JamesDspHandle, hq: Boolean, semitones: Float, glideMs: Float): Boolean
 

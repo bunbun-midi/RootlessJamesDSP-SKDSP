@@ -214,6 +214,9 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
             }
             R.xml.speed_shift_preferences -> setupSpeedShift()
             R.xml.recorder_preferences -> setupRecorder()
+            R.xml.power_preferences -> setupOverlayPermissionPrompt(
+                getString(R.string.key_power_bubble_enable), R.string.power_bubble_permission_required
+            )
             R.xml.bpm_preferences -> setupOverlayPermissionPrompt(
                 getString(R.string.key_bpm_enable), R.string.bpm_permission_required
             )
@@ -292,6 +295,11 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
 
         // Encoding/quality/bitrate only apply to MP3 & Ogg; quality to VBR, bitrate to fixed bitrate
         val group = findPreference<SwitchPreferenceGroup>(enableKey) ?: return
+        // The same screen serves Recorder A and B
+        if (requireArguments().getString(BUNDLE_PREF_NAME) == Constants.PREF_RECORDER_B) {
+            group.title = getString(R.string.recorder_b_title)
+            group.summary = getString(R.string.recorder_b_summary)
+        }
         group.childVisibilityFilter = { pref ->
             val prefs = preferenceManager.sharedPreferences
             val format = prefs?.getString(formatKey, "pcm16")
@@ -343,7 +351,7 @@ class PreferenceGroupFragment : PreferenceFragmentCompat(), KoinComponent {
                 requireContext().sendLocalBroadcast(Intent(Constants.ACTION_SPEED_SHIFT_REFRESH))
             R.xml.recorder_preferences ->
                 requireContext().sendLocalBroadcast(Intent(Constants.ACTION_RECORDER_REFRESH))
-            R.xml.bpm_preferences, R.xml.keyboard_preferences ->
+            R.xml.bpm_preferences, R.xml.keyboard_preferences, R.xml.power_preferences ->
                 requireContext().sendLocalBroadcast(Intent(Constants.ACTION_OVERLAYS_REFRESH))
         }
     }

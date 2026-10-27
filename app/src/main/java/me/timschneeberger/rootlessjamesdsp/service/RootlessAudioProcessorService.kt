@@ -118,13 +118,20 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
     private var isProcessorDisposing = false
     @Volatile
     private var isServiceDisposing = false
+    // Identifies the current audio thread. A thread whose number is no longer current must stop,
+    // even if it outlived stopRecording()'s join timeout and the flags above were reset by a restart.
+    @Volatile
+    private var processorGeneration = 0
 
     // Speed shift (floating button)
     private var speedShiftBubble: SpeedShiftBubble? = null
 
     // Recorder effect block (floating button)
     private var recorderBubble: RecorderBubble? = null
-    private var fileRecorder: AudioFileRecorder? = null
+    // Running recording session: Recorder A and/or B, started & stopped on the same audio block
+    private var recordingSession: List<AudioFileRecorder> = emptyList()
+    private var sessionStopping = false
+    private val sessionResults = mutableListOf<AudioFileRecorder.Result>()
 
     // Floating BPM display and piano keyboard
     private var bpmDisplay: BpmDisplay? = null
@@ -193,6 +200,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         // Recorder: floating record button if the block is enabled
         RecorderController.backend = recorderBackend
         RecorderController.prefs(this).registerOnSharedPreferenceChangeListener(recorderPreferencesListener)
+        RecorderController.prefsB(this).registerOnSharedPreferenceChangeListener(recorderPreferencesListener)
         updateRecorderBubble()
 
         // BPM display & piano keyboard
@@ -276,6 +284,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
         // Finish a running file recording before the engine (which feeds it) goes away
         RecorderController.prefs(this).unregisterOnSharedPreferenceChangeListener(recorderPreferencesListener)
+        RecorderController.prefsB(this).unregisterOnSharedPreferenceChangeListener(recorderPreferencesListener)
         BpmController.prefs(this).unregisterOnSharedPreferenceChangeListener(overlayPreferencesListener)
         KeyboardController.prefs(this).unregisterOnSharedPreferenceChangeListener(overlayPreferencesListener)
         if (KeyboardController.backend === keyboardBackend)
@@ -289,7 +298,9 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             RecorderController.backend = null
         recorderBubble?.hide()
         recorderBubble = null
-        fileRecorder?.stopBlocking(2000)
+        val session = recordingSession
+        stopFileRecording()
+        session.forEach { it.awaitFinished(2000) }
 
         // Stop recording and release engine
         stopRecording()
@@ -440,14 +451,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         override fun stopRecording() = stopFileRecording()
     }
 
-    // Show or hide the floating record button
+    // Show or hide the floating record button (shared by Recorder A and B)
     private fun updateRecorderBubble() {
         if (isServiceDisposing)
             return
 
-        val enabled = RecorderController.prefs(this)
-            .getBoolean(getString(R.string.key_recorder_enable), false)
-        if (enabled && Settings.canDrawOverlays(this)) {
+        val key = getString(R.string.key_recorder_enable)
+        val enabledA = RecorderController.prefs(this).getBoolean(key, false)
+        val enabledB = RecorderController.prefsB(this).getBoolean(key, false)
+        if ((enabledA || enabledB) && Settings.canDrawOverlays(this)) {
             if (recorderBubble == null) {
                 recorderBubble = try {
                     RecorderBubble(this).also { it.show() }
@@ -462,59 +474,100 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
             recorderBubble = null
         }
 
-        // Switching the recorder block off ends a running recording
-        if (!enabled)
+        // Switching both recorder blocks off ends a running recording
+        if (!enabledA && !enabledB)
             stopFileRecording()
     }
 
+    private fun createFileRecorder(prefs: SharedPreferences, baseName: String) = AudioFileRecorder(
+        this,
+        engine.sampleRate.toInt(),
+        AudioFileRecorder.Format.fromValue(prefs.getString(getString(R.string.key_recorder_format), null)),
+        variableBitrate = prefs.getString(getString(R.string.key_recorder_bitrate_mode), "vbr") != "cbr",
+        quality = prefs.getFloat(getString(R.string.key_recorder_quality), 7f).toInt(),
+        bitrateKbps = prefs.getFloat(getString(R.string.key_recorder_bitrate), 192f).toInt(),
+        baseName = baseName,
+        requestStop = { stopFileRecording() },
+        onFinished = { finished, result -> onFileRecordingFinished(finished, result) }
+    )
+
+    /** Starts every enabled recorder (A and/or B) on the same audio block */
     private fun startFileRecording() {
-        if (fileRecorder != null || isServiceDisposing)
+        if (recordingSession.isNotEmpty() || isServiceDisposing)
             return
 
-        val prefs = RecorderController.prefs(this)
-        val recorder = AudioFileRecorder(
-            this,
-            engine.sampleRate.toInt(),
-            AudioFileRecorder.Format.fromValue(prefs.getString(getString(R.string.key_recorder_format), null)),
-            variableBitrate = prefs.getString(getString(R.string.key_recorder_bitrate_mode), "vbr") != "cbr",
-            quality = prefs.getFloat(getString(R.string.key_recorder_quality), 7f).toInt(),
-            bitrateKbps = prefs.getFloat(getString(R.string.key_recorder_bitrate), 192f).toInt(),
-            attachTap = { tap -> engine.setRecorderTap(tap) },
-            onFinished = { finished, result -> onFileRecordingFinished(finished, result) }
-        )
+        val key = getString(R.string.key_recorder_enable)
+        val prefsA = RecorderController.prefs(this)
+        val prefsB = RecorderController.prefsB(this)
+        val stamp = "SK DSP " + java.text.SimpleDateFormat("yyyy-MM-dd HH-mm-ss", java.util.Locale.US)
+            .format(java.util.Date())
+        val recorderA = if (prefsA.getBoolean(key, false)) createFileRecorder(prefsA, "$stamp A") else null
+        val recorderB = if (prefsB.getBoolean(key, false)) createFileRecorder(prefsB, "$stamp B") else null
+        val recorders = listOfNotNull(recorderA, recorderB)
+        if (recorders.isEmpty())
+            return
+
+        val prepared = mutableListOf<AudioFileRecorder>()
         try {
-            recorder.start()
+            recorders.forEach {
+                it.prepare()
+                prepared += it
+            }
+            // One call attaches both taps, so both files begin with the same audio block
+            if (!engine.setRecorderTaps(recorderA?.tapHandle ?: 0L, recorderB?.tapHandle ?: 0L))
+                throw java.io.IOException("Audio engine not ready")
         } catch (ex: Exception) {
             Timber.e("Failed to start recording")
             Timber.e(ex)
+            prepared.forEach { it.abort() }
             toast(getString(R.string.recorder_failed_toast, ex.message ?: ex.javaClass.simpleName))
             return
         }
-        fileRecorder = recorder
+
+        recorders.forEach { it.begin() }
+        recordingSession = recorders
+        sessionStopping = false
+        sessionResults.clear()
         RecorderController.onStarted()
     }
 
+    /** Stops all recorders of the session on the same audio block; files complete asynchronously */
     private fun stopFileRecording() {
-        fileRecorder?.stop()
+        if (recordingSession.isEmpty() || sessionStopping)
+            return
+        sessionStopping = true
+        // Detach first: after this returns the audio thread no longer writes into the taps
+        engine.setRecorderTaps(0L, 0L)
+        recordingSession.forEach { it.finish() }
     }
 
     private fun onFileRecordingFinished(recorder: AudioFileRecorder, result: AudioFileRecorder.Result) {
-        if (fileRecorder === recorder)
-            fileRecorder = null
+        if (recorder !in recordingSession)
+            return
+        sessionResults += result
+        if (sessionResults.size < recordingSession.size)
+            return
 
-        when (result) {
-            is AudioFileRecorder.Result.Saved -> {
-                RecorderController.onStopped(result.name)
-                if (result.droppedSeconds >= 0.05f)
-                    toast(getString(R.string.recorder_dropped_toast,
-                        String.format(java.util.Locale.getDefault(), "%.1f s", result.droppedSeconds)))
-                else
-                    toast(getString(R.string.recorder_saved_toast, result.name), false)
-            }
-            is AudioFileRecorder.Result.Failed -> {
-                RecorderController.onStopped(null)
-                toast(getString(R.string.recorder_failed_toast, result.message))
-            }
+        // All files of the session are complete
+        val results = sessionResults.toList()
+        recordingSession = emptyList()
+        sessionStopping = false
+        sessionResults.clear()
+
+        val saved = results.filterIsInstance<AudioFileRecorder.Result.Saved>()
+        val failed = results.filterIsInstance<AudioFileRecorder.Result.Failed>()
+        RecorderController.onStopped(saved.firstOrNull()?.name)
+
+        failed.firstOrNull()?.let {
+            toast(getString(R.string.recorder_failed_toast, it.message))
+        }
+        if (saved.isNotEmpty()) {
+            val dropped = saved.maxOf { it.droppedSeconds }
+            if (dropped >= 0.05f)
+                toast(getString(R.string.recorder_dropped_toast,
+                    String.format(java.util.Locale.getDefault(), "%.1f s", dropped)))
+            else
+                toast(getString(R.string.recorder_saved_toast, saved.joinToString(", ") { it.name }), false)
         }
     }
 
@@ -549,10 +602,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                 ACTION_SAMPLE_RATE_UPDATED -> {
                     engine.syncWithPreferences(arrayOf(Constants.PREF_CONVOLVER))
                     // A WAV file has one sample rate; finish the current file if it changed
-                    fileRecorder?.let {
-                        if (it.sampleRate != engine.sampleRate.toInt())
-                            it.stop()
-                    }
+                    if (recordingSession.any { it.sampleRate != engine.sampleRate.toInt() })
+                        stopFileRecording()
                 }
                 ACTION_PREFERENCES_UPDATED -> engine.syncWithPreferences()
                 ACTION_SERVICE_RELOAD_LIVEPROG -> engine.syncWithPreferences(arrayOf(Constants.PREF_LIVEPROG))
@@ -759,6 +810,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
         }
 
         // TODO Move all audio-related code to C++
+        val generation = ++processorGeneration
         recorderThread = Thread {
             // Audio threads must not be preempted by regular app/background work
             try {
@@ -793,6 +845,15 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                 var speedShiftWasActive = false
                 val shiftInBuffer = FloatArray(bufferSize)
+                // The last captured audio (whole blocks, ring buffer). When slow-down is switched
+                // on, it primes the stretcher so its output starts without a gap.
+                val historyBlocks = (SPEED_SHIFT_PRIME_FRAMES + blockFrames - 1) / blockFrames
+                val historyRing = FloatArray(historyBlocks * bufferSize)
+                val historyLinear = FloatArray(historyBlocks * bufferSize)
+                var historyNext = 0   // block index written next
+                var historyCount = 0  // blocks filled so far
+                // Switching on: short splice (the stretcher output is aligned to the dry signal)
+                val spliceFrames = minOf(blockFrames, sampleRate / 100 /* 10 ms */)
                 val bpmBuffer = FloatArray(bufferSize)
                 val shiftOutBuffer = FloatArray(bufferSize)
                 // While idle, keep playing until the slowed-down backlog has been played (System.nanoTime)
@@ -807,25 +868,30 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     SpeedShiftController.backlogSeconds = 0f
                 }
 
+                fun recordHistory(dry: FloatArray) {
+                    System.arraycopy(dry, 0, historyRing, historyNext * bufferSize, bufferSize)
+                    historyNext = (historyNext + 1) % historyBlocks
+                    if (historyCount < historyBlocks)
+                        historyCount++
+                }
+
+                /** Copies the recorded history, oldest first, to historyLinear; returns its length in frames */
+                fun linearizeHistory(): Int {
+                    val oldest = (historyNext - historyCount + historyBlocks) % historyBlocks
+                    for (b in 0 until historyCount) {
+                        val src = ((oldest + b) % historyBlocks) * bufferSize
+                        System.arraycopy(historyRing, src, historyLinear, b * bufferSize, bufferSize)
+                    }
+                    return historyCount * blockFrames
+                }
+
                 /**
                  * Replaces the captured block with the speed-shifted signal while slow-down is on.
-                 * Switching on/off is crossfaded over one block (equal power).
+                 * Switching on splices to the (pre-filled, aligned) stretcher output over 10 ms;
+                 * switching off crossfades back to real time over one block (equal power).
                  */
                 fun applySpeedShift() {
                     val active = SpeedShiftController.isActive
-                    if (!active && !speedShiftWasActive)
-                        return
-
-                    if (active && speedShifter == 0L) {
-                        speedShifter = SpeedShifter.nativeCreate(sampleRate)
-                        if (speedShifter == 0L) {
-                            Timber.e("Failed to create speed shifter")
-                            SpeedShiftController.setActive(false)
-                            return
-                        }
-                    }
-                    if (speedShifter == 0L)
-                        return
 
                     // Captured (dry) block as float
                     val dry = if (encoding == AudioEncoding.PcmShort) {
@@ -834,10 +900,42 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                         shiftInBuffer
                     } else floatBuffer
 
+                    if (!active && !speedShiftWasActive) {
+                        recordHistory(dry)
+                        return
+                    }
+
+                    val switchingOn = active && speedShifter == 0L
+                    if (switchingOn) {
+                        speedShifter = SpeedShifter.nativeCreate(sampleRate)
+                        if (speedShifter == 0L) {
+                            Timber.e("Failed to create speed shifter")
+                            SpeedShiftController.setActive(false)
+                            recordHistory(dry)
+                            return
+                        }
+                        SpeedShifter.nativeSetSpeed(speedShifter, SpeedShiftController.speed)
+                        val historyFrames = linearizeHistory()
+                        if (historyFrames > 0)
+                            SpeedShifter.nativePrime(speedShifter, historyLinear, historyFrames, dry, blockFrames, spliceFrames)
+                    }
+                    recordHistory(dry)
+                    if (speedShifter == 0L)
+                        return
+
                     SpeedShifter.nativeSetSpeed(speedShifter, SpeedShiftController.speed)
                     SpeedShifter.nativeProcess(speedShifter, dry, shiftOutBuffer, blockFrames)
 
-                    if (active != speedShiftWasActive) {
+                    if (switchingOn) {
+                        // Equal-gain splice: the shifted audio is aligned to the dry signal
+                        for (frame in 0 until spliceFrames) {
+                            val g = 0.5f - 0.5f * cos((frame + 0.5f) / spliceFrames * PI.toFloat())
+                            for (ch in 0..1) {
+                                val i = frame * 2 + ch
+                                shiftOutBuffer[i] = shiftOutBuffer[i] * g + dry[i] * (1f - g)
+                            }
+                        }
+                    } else if (active != speedShiftWasActive) {
                         for (frame in 0 until blockFrames) {
                             val angle = (frame + 0.5f) / blockFrames * (PI.toFloat() / 2f)
                             val rising = sin(angle)
@@ -878,7 +976,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     lastUnderrunCount = track.underrunCount
                 }
 
-                while (!isProcessorDisposing) {
+                while (!isProcessorDisposing && generation == processorGeneration) {
                     if(recreateRecorderRequested) {
                         recreateRecorderRequested = false
                         Timber.d("Recreating recorder without stopping thread...")
@@ -897,6 +995,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
                         // Recreate recorder with new AudioPlaybackRecordingConfiguration
                         recorder = buildAudioRecord(encodingFormat, sampleRate, recordBufferBytes)
+                        historyCount = 0
                         Timber.d("Recorder recreated")
                     }
 
@@ -920,6 +1019,7 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
                     {
                         // Pending slowed-down audio is stale once playback stopped
                         releaseSpeedShifter()
+                        historyCount = 0
 
                         if(recorder.state == AudioRecord.STATE_INITIALIZED &&
                             recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING)
@@ -1077,12 +1177,17 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     // Terminate recording thread
     fun stopRecording() {
-        if (recorderThread != null) {
-            isProcessorDisposing = true
-            recorderThread!!.interrupt()
-            recorderThread!!.join(500)
-            recorderThread = null
-        }
+        val thread = recorderThread ?: return
+        isProcessorDisposing = true
+        // Retire this thread for good: a restart resets isProcessorDisposing, and a thread that
+        // was still blocked in read()/write() would otherwise keep running next to the new one
+        // (two copies of the audio playing slightly apart = echo).
+        processorGeneration++
+        thread.interrupt()
+        thread.join(2000)
+        if (thread.isAlive)
+            Timber.w("stopRecording: audio thread did not stop within 2 s; it exits after its current block")
+        recorderThread = null
     }
 
     // Hard restart recording thread
@@ -1195,6 +1300,8 @@ class RootlessAudioProcessorService : BaseAudioProcessorService() {
 
     companion object {
         const val SESSION_LOSS_MAX_RETRIES = 1
+        /** Captured audio kept for priming the speed shifter (SpeedShifter::kPrimeFrames) */
+        const val SPEED_SHIFT_PRIME_FRAMES = 8192
 
         // Capacity of the capture/playback buffers in DSP blocks (excluding the pre-fill)
         private const val RECORD_BUFFER_BLOCKS = 3

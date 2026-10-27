@@ -15,6 +15,7 @@ extern char benchmarkCompletionFlag;
 namespace chain {
 
 const int kDefaultOrder[COUNT] = {
+    RECORDER_B, /* dry: before all effects */
     PITCH_SHIFT, PITCH_SHIFT_HQ, TUBE, COMPANDER, COMPRESSOR, BASS_BOOST, MULTI_EQ, ARBITRARY_EQ,
     CONVOLVER, DDC, LIVEPROG, CROSSFEED, STEREO_WIDE, REVERB, RECORDER
 };
@@ -297,12 +298,15 @@ static void orderedProcess(JamesDSPLib* jdsp, size_t n) {
                 }
                 break;
             case RECORDER:
+            case RECORDER_B: {
                 // Last in the chain: recorded after the output stage below (exactly what is heard).
                 // Elsewhere: recorded here, with the output stage's gain + limiter applied to the copy.
-                if (st->recorder != nullptr && id != st->order[COUNT - 1])
-                    st->recorder->writeLimited(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n,
-                                               jdsp->postGain, jdsp->limiter.threshold, jdsp->limiter.relCoef);
+                RecorderTap* tap = id == RECORDER ? st->recorder : st->recorderB;
+                if (tap != nullptr && id != st->order[COUNT - 1])
+                    tap->writeLimited(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n,
+                                      jdsp->postGain, jdsp->limiter.threshold, jdsp->limiter.relCoef);
                 break;
+            }
             default:
                 break;
         }
@@ -310,8 +314,12 @@ static void orderedProcess(JamesDSPLib* jdsp, size_t n) {
 
     processOutputLimiter(jdsp, n);
 
-    if (st->recorder != nullptr && st->order[COUNT - 1] == RECORDER)
-        st->recorder->write(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
+    {
+        const int last = st->order[COUNT - 1];
+        RecorderTap* tap = last == RECORDER ? st->recorder : last == RECORDER_B ? st->recorderB : nullptr;
+        if (tap != nullptr)
+            tap->write(jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], n);
+    }
 
     // Same as JamesDSPProcessCheckBenchmarkReady(): once benchmark results are available,
     // rebuild convolutions to use the optimal partitioning (once).

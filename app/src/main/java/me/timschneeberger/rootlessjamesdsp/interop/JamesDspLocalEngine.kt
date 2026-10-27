@@ -154,13 +154,14 @@ class JamesDspLocalEngine(context: Context, callbacks: JamesDspWrapper.JamesDspC
         return JamesDspWrapper.setPitchShiftGlide(handle, hq, semitones, glideMs)
     }
 
-    /** Attaches a [RecorderTap] to the "Recorder" effect block (0 = detach). Blocks until the
-     *  audio thread is outside the effect chain, so a detached tap can be freed afterwards. */
-    fun setRecorderTap(tap: Long): Boolean
+    /** Attaches [RecorderTap]s to the Recorder A / B effect blocks (0 = detach) in one step, so both
+     *  start on the same audio block. Blocks until the audio thread is outside the effect chain,
+     *  so detached taps can be freed afterwards. */
+    fun setRecorderTaps(tapA: Long, tapB: Long): Boolean
     {
         if (handle == 0L)
             return false
-        return JamesDspWrapper.setRecorderTap(handle, tap)
+        return JamesDspWrapper.setRecorderTaps(handle, tapA, tapB)
     }
 
     override fun setMultiEqualizerInternal(

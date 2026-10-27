@@ -10,9 +10,11 @@ object Constants {
     const val PREF_SPEED_SHIFT = "speedshift"
     // Recorder block (not part of presets either)
     const val PREF_RECORDER = "recorder"
+    const val PREF_RECORDER_B = "recorder_b"
     // BPM display and piano keyboard overlays (not part of presets either)
     const val PREF_BPM = "bpm"
     const val PREF_KEYBOARD = "keyboard"
+    const val PREF_POWER = "power"
 
     // DSP-relevant preference namespaces
     const val PREF_BASS = "dsp_bass"
