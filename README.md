@@ -1,21 +1,21 @@
 <h1 align="center">
   <img alt="Icon" width="75" src="https://github.com/thepbone/RootlessJamesDSP/blob/master/img/icons/web/icon-192.png?raw=true">
   <br>
-  RootlessJamesDSP
+  RootlessJamesDSP - SKDSP
   <br>
 </h1>
-<h4 align="center">System-wide JamesDSP implementation for non-rooted Android devices</h4>
+<h4 align="center">System-wide JamesDSP implementation for non-rooted Android devices - with new speed shifting, pitchshifter, compressor, effects reordering, floating recorders, bpm detection, and keyboard input for pitchshifters.</h4>
 <p align="center">
-  <a href="https://play.google.com/store/apps/details?id=me.timschneeberger.rootlessjamesdsp&utm_source=github&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1">
+  <a href="https://play.google.com/store/apps/details?id=net.skeyboard.dsp">
   	<img alt="Google play release" src="https://img.shields.io/github/v/release/ThePBone/RootlessJamesDSP?label=google%20play">
   </a>
   <a href="https://f-droid.org/packages/me.timschneeberger.rootlessjamesdsp/">
   	<img alt="F-Droid release" src="https://img.shields.io/f-droid/v/me.timschneeberger.rootlessjamesdsp">
   </a>
-  <a href="https://github.com/ThePBone/RootlessJamesDSP/blob/master/LICENSE">
+  <a href="https://github.com/bunbun-midi/RootlessJamesDSP-SKDSP/blob/master/LICENSE">
       <img alt="License" src="https://img.shields.io/github/license/ThePBone/RootlessJamesDSP">
   </a>
-    <a href="https://github.com/ThePBone/RootlessJamesDSP/actions/workflows/build.yml">
+    <a href="https://github.com/bunbun-midi/RootlessJamesDSP-SKDSP/actions/workflows/build.yml">
       <img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/thepbone/rootlessjamesdsp/build.yml">
   </a>
 
@@ -28,7 +28,7 @@
 </p>
 
 <p align="center">
-  <a href='https://play.google.com/store/apps/details?id=me.timschneeberger.rootlessjamesdsp&utm_source=github&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1'> 
+  <a href='https://play.google.com/store/apps/details?id=net.skeyboard.dsp'> 
     <img width="300" alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png'/>
   </a>
 </p>
@@ -151,6 +151,7 @@ All the limitations mentioned above are **not relevant** for the magisk/root ver
 
 ## Credits
 
+* bunbun-midi - speedshifting, pitchshifters, floating keyboard for pitchshifter (two algos), compressor, effects reordering, floating recorders
 * JamesDSP - [James Fung (@james34602)](https://github.com/james34602)
 * Theming system & backup system based on Tachiyomi
 
